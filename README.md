@@ -1,2 +1,2 @@
-# boms
+# BOMS
 Bridal Omnichannel Management System
