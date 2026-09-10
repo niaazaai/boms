@@ -1,0 +1,28 @@
+. Database (specs/database/)
+File	Contents
+platform
+tenants, users, RBAC, branches, warehouses, currencies, units, payments, settings
+inventory
+categories, items (sale/rental/both), media, stock ledger, adjust, transfer, reservations
+sales
+customers, orders (sale|rental), payments, returns
+procurement
+suppliers, PO, receive, supplier pay (minimal)
+finance
+5 pillars: cash, income, expenses, A/P, A/R + P&L summary
+all
+combined schemas + cross-module notes
+Stock is ledger-based (never mutate qty directly). Rental uses dates + reserve/out/return.
+
+2. Wireframes (specs/wireframes/)
+Mobile-first screens + page order, replaced the heavy Excalidraw SCM flows: 01-auth → 02-platform-settings → 03-inventory → 04-sales → 05-procurement → 06-finance
+
+3. Flows (specs/flows/application-flows.md)
+Mermaid charts: nav, daily owner loop, sale, rental, procurement→stock→finance, end-of-day P&L, agent build order.
+
+4. Features (specs/features/) — agent order
+Platform → 2. Inventory → 3. Sales → 4. Procurement → 5. Finance
+Each file has goals, checklists, screens, rules, integrations, acceptance checks.
+
+Figma: not generated yet — Figma MCP needs auth. Wireframes are the structure source of truth under specs/designs/ until we connect Figma.
+
