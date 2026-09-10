@@ -1,0 +1,121 @@
+----------------------------------------------------------------------------------
+PROCUREMENT MODULE
+(simple purchasing — enough for correct stock cost + AP, not a full SCM suite)
+----------------------------------------------------------------------------------
+
+    -- Bridal shop needs: record supplier, buy dresses/accessories, receive into stock.
+    -- Skip complex RFQ / shipment / landed-cost flows from the old ERP reference.
+
+
+    procurement_suppliers
+        id (PK)
+        tenant_id                   FK tenants(id)
+        supplier_code               varchar(50)             -- SUP26-0001
+        name                        varchar(255) not null
+        contact_person              varchar(150)
+        phone                       varchar(50)
+        email                       varchar(255)
+        address                     text
+        note                        text
+        payment_term_id             FK payment_terms(id)
+        currency_id                 FK currencies(id)
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    procurement_purchase_orders
+        id (PK)
+        tenant_id                   FK tenants(id)
+        po_number                   varchar(100) unique     -- PO26-000001
+        supplier_id                 FK procurement_suppliers(id)
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)       -- default receive warehouse
+
+        order_date                  date not null
+        expected_date               date nullable
+
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+
+        subtotal                    numeric(18,2) default 0
+        discount_amount             numeric(18,2) default 0
+        tax_amount                  numeric(18,2) default 0
+        other_cost                  numeric(18,2) default 0 -- shipping / customs simple
+        total_amount                numeric(18,2) default 0
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) default 0 -- AP remaining
+
+        payment_status              enum('unpaid','partial','paid') default 'unpaid'
+        status                      enum('draft','ordered','partial_received','received','cancelled') default 'draft'
+
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    procurement_purchase_order_items
+        id (PK)
+        purchase_order_id           FK procurement_purchase_orders(id)
+        inventory_item_id           FK inventory_items(id) nullable
+            -- null when buying a brand-new dress not yet created; create item on receive
+        item_name                   varchar(255) not null   -- snapshot / draft name
+        quantity_ordered            numeric(18,2) not null
+        quantity_received           numeric(18,2) default 0
+        unit_cost                   numeric(18,2) not null
+        other_cost                  numeric(18,2) default 0
+        line_total                  numeric(18,2) not null
+        unit_id                     FK units(id)
+        note                        text
+
+
+    procurement_receipts
+        id (PK)
+        tenant_id                   FK tenants(id)
+        receipt_number              varchar(100) unique     -- GRN26-0001
+        purchase_order_id           FK procurement_purchase_orders(id)
+        supplier_id                 FK procurement_suppliers(id)
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        received_date               date not null
+        status                      enum('draft','posted','cancelled') default 'draft'
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- On post: create inventory_stock_transactions (stock_in) + update item cost
+
+
+    procurement_receipt_items
+        id (PK)
+        receipt_id                  FK procurement_receipts(id)
+        purchase_order_item_id      FK procurement_purchase_order_items(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity_received           numeric(18,2) not null
+        unit_cost                   numeric(18,2) not null
+        other_cost                  numeric(18,2) default 0
+        note                        text
+
+
+    procurement_supplier_payments
+        id (PK)
+        tenant_id                   FK tenants(id)
+        payment_number              varchar(100) unique     -- SPAY26-0001
+        supplier_id                 FK procurement_suppliers(id)
+        purchase_order_id           FK procurement_purchase_orders(id) nullable
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        payment_method_id           FK payment_methods(id)
+        finance_account_id          FK finance_accounts(id)
+        paid_at                     timestamptz not null
+        reference_no                varchar(100)
+        note                        text
+        created_by                  FK users(id)
+        created_at
+        -- On create: reduce PO balance + create finance expense/AP settlement

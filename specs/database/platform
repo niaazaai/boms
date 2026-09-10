@@ -1,0 +1,205 @@
+----------------------------------------------------------------------------------
+PLATFORM MODULE
+(common / tenant / auth / master data used by all modules)
+----------------------------------------------------------------------------------
+
+    -- Common audit columns on tenant-scoped tables:
+    -- tenant_id, created_by, updated_by, created_at, updated_at
+
+
+    tenants
+        id (PK)
+        code                        varchar(20) unique   -- e.g. ADF (used in SKU prefix)
+        name                        varchar(255) not null
+        phone                       varchar(50)
+        email                       varchar(255)
+        address                     text
+        website_url                 varchar(255)
+        logo_path                   varchar(255)
+        default_currency_id         FK currencies(id)
+        default_language_id         FK languages(id)
+        status                      enum('active','inactive','suspended') default 'active'
+        created_at
+        updated_at
+
+
+    languages
+        id (PK)
+        code                        varchar(10) unique   -- e.g. en, fa, ps, ar
+        name                        varchar(50)          -- English, Dari, Pashto, Arabic
+        direction                   enum('ltr','rtl') default 'ltr'
+        status                      enum('active','inactive') default 'active'
+
+
+    users
+        id (PK)
+        tenant_id                   FK tenants(id)
+        name                        varchar(255) not null
+        email                       varchar(255) not null
+        phone                       varchar(50)
+        password_hash               varchar(255) not null
+        avatar_path                 varchar(255)
+        branch_id                   FK branches(id) nullable   -- home / default branch
+        preferred_language_id       FK languages(id)
+        last_login_at               timestamptz
+        status                      enum('active','inactive','invited') default 'invited'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- unique (tenant_id, email)
+
+
+    roles
+        id (PK)
+        tenant_id                   FK tenants(id) nullable  -- null = system role template
+        code                        varchar(50)              -- owner, manager, cashier, staff
+        name                        varchar(100)
+        description                 text
+        is_system                   boolean default false
+        status                      enum('active','inactive') default 'active'
+        created_at
+        updated_at
+
+
+    permissions
+        id (PK)
+        code                        varchar(100) unique      -- inventory.items.create
+        module                      varchar(50)              -- platform, inventory, sales, procurement, finance
+        name                        varchar(150)
+        description                 text
+
+
+    role_permissions
+        id (PK)
+        role_id                     FK roles(id)
+        permission_id               FK permissions(id)
+        -- unique (role_id, permission_id)
+
+
+    user_roles
+        id (PK)
+        user_id                     FK users(id)
+        role_id                     FK roles(id)
+        branch_id                   FK branches(id) nullable -- role scoped to branch if needed
+        -- unique (user_id, role_id, branch_id)
+
+
+    branches
+        id (PK)
+        tenant_id                   FK tenants(id)
+        code                        varchar(20)
+        name                        varchar(255) not null
+        phone                       varchar(50)
+        address                     text
+        is_main                     boolean default false
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- unique (tenant_id, code)
+
+
+    warehouses
+        id (PK)
+        tenant_id                   FK tenants(id)
+        branch_id                   FK branches(id)
+        code                        varchar(20)
+        name                        varchar(255) not null
+        location                    varchar(255)
+        capacity                    numeric(18,2) nullable
+        is_default                  boolean default false
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- unique (tenant_id, code)
+
+
+    currencies
+        id (PK)
+        tenant_id                   FK tenants(id) nullable  -- null = global catalog
+        code                        varchar(10)              -- AFN, USD, EUR
+        name                        varchar(100)
+        symbol                      varchar(10)
+        decimal_places              int default 2
+        is_default                  boolean default false
+        exchange_rate_to_default    numeric(18,6) default 1  -- vs tenant default currency
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    units
+        id (PK)
+        tenant_id                   FK tenants(id) nullable
+        code                        varchar(20)              -- pcs, box, set
+        name                        varchar(100)             -- Piece, Box, Set
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    payment_methods
+        id (PK)
+        tenant_id                   FK tenants(id)
+        code                        varchar(30)              -- cash, card, transfer, wallet
+        name                        varchar(100)
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    payment_terms
+        id (PK)
+        tenant_id                   FK tenants(id)
+        code                        varchar(30)              -- immediate, deposit_50, net_7
+        name                        varchar(100)
+        days                        int default 0
+        deposit_percent             numeric(5,2) default 0
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    tenant_settings
+        id (PK)
+        tenant_id                   FK tenants(id) unique
+        business_type               enum('bridal_rental','bridal_sale','bridal_mixed') default 'bridal_mixed'
+        sku_prefix                  varchar(20)              -- usually tenant.code
+        allow_negative_stock        boolean default false
+        rental_default_days         int default 3
+        rental_deposit_percent      numeric(5,2) default 30
+        low_stock_alert             boolean default true
+        timezone                    varchar(50) default 'Asia/Kabul'
+        date_format                 varchar(30) default 'YYYY-MM-DD'
+        mobile_nav_style            enum('bottom_tabs','drawer') default 'bottom_tabs'
+        custom_json                 jsonb                    -- extra UI / feature flags
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    audit_logs
+        id (PK)
+        tenant_id                   FK tenants(id)
+        user_id                     FK users(id)
+        module                      varchar(50)
+        action                      varchar(50)              -- create, update, delete, login, export
+        entity_type                 varchar(50)
+        entity_id                   int nullable
+        summary                     varchar(255)
+        meta                        jsonb
+        ip_address                  varchar(45)
+        created_at

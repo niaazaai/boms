@@ -1,125 +1,12 @@
  
 
 
-users
-    id (PK)
-    name 
-    email 
-    ... 
 
 
-tenant
-    id (PK)
-    code   - i.e. ADF 
-    name
-    phone_number 
-    address 
-    website_url 
-
-
-
-
-
-common columns in all tables bellow: created_at , update_at , updated_by , created_by , tenant_id 
-PLATFORM MODULE : 
-
-    branches
-        id (PK)
-        code
-        name
-    
-    units 
-        id 
-        code 
-        name 
-    
-    currencies 
-        id 
-        code 
-        name 
-
-    warehouses
-        id (PK)
-        code
-        name
-        location
-        capacity
-        branch_id 
-    
-    platform_language 
-        id 
-        code 
-        name enum ('DARI' , 'PASHTO' , 'ENGLISH' , 'ARABIC')
-
-        
 
 INVENTORY MODULE : 
 
-    inventory_main_categories
-        id (PK)
-        title
-        status enum('active','inactive') default 'active'
-
-    inventory_sub_categories
-        id
-        title varchar
-        main_category_id FK inventory_main_categories(id)
-        status enum('active','inactive') default 'active'
-
-    inventory_item_types
-        id
-        title
-        status enum('active','inactive') default 'active'
-
-    inventory_item_models
-        id
-        title - data example : model name ... 
-        status enum('active','inactive') default 'active'
-
-    inventory_items
-        id (PK)
-        sku                         varchar(100) unique  -- [{PREFIX-tenant-code}{YEAR}-{000001}] e.g., ADF24-0001
-        reorder_level               numeric(10,2)
-        description                 text
-        components                  text,  -- or separate table if needed
-        custom_fields               jsonb
-        quality                     enum('high', 'medium', 'normal', 'low') default 'normal'
-        branch_id                   FK branches(id)
-        warehouse_id                FK warehouses(id)
-        tenant_id                   FK tenant(id)
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-
-        -- Pricing/Purchase
-        sales_currency_id           FK currencies(id)
-        sales_unit_price            numeric(18,2)
-        sales_unit                  FK - unit table (id)
-        purchase_opening_date       date
-        purchase_date               date
-        purchase_unit               enum('piece', 'box', 'count', 'unit') - FK TO unit table 
-        purchase_amount             numeric(18,2) not null default 0
-        purchase_other_cost         numeric(18,2) default 0
-        purchase_currency_id        FK currencies(id)
-        purchase_exchange_rate      numeric(18,2) default 0
-
-
-        -- Status/flags
-        is_featured                 boolean default false
-        is_hot                      boolean default false
-        is_trending                 boolean default false
-        is_wanted                   boolean default false
-        repair_note                 varchar(512)
-        status                      enum('new', 'damaged', 'expired', 'disposed', 'rented', 'reserved', 'repairing') default 'new'
-
-    inventory_item_media
-        id (PK)
-        inventory_item_id           FK inventory_items(id)
-        file_path                   varchar(255) not null
-        title                       varchar(255)
-        is_main                     boolean
-
+   
     ## 🔑 Core Stock Flow Management
 
     stock_transactions

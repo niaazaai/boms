@@ -1,0 +1,241 @@
+----------------------------------------------------------------------------------
+INVENTORY MODULE
+(bridal dresses, rental outfits, accessories — simple stock + status tracking)
+----------------------------------------------------------------------------------
+
+    -- Notes for bridal shops:
+    -- • One physical dress is usually one inventory_item (SKU) with qty 1.
+    -- • Accessories / veils / shoes may use quantity > 1.
+    -- • Never mutate stock qty directly — always use inventory_stock_transactions.
+    -- • Current qty = SUM(quantity) of stock transactions for item + warehouse.
+
+
+    inventory_main_categories
+        id (PK)
+        tenant_id                   FK tenants(id)
+        title                       varchar(150) not null   -- Bridal Dresses, Rental Wear, Accessories
+        sort_order                  int default 0
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_sub_categories
+        id (PK)
+        tenant_id                   FK tenants(id)
+        main_category_id            FK inventory_main_categories(id)
+        title                       varchar(150) not null   -- A-Line, Ball Gown, Hijab Set
+        sort_order                  int default 0
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_item_types
+        id (PK)
+        tenant_id                   FK tenants(id)
+        title                       varchar(150) not null   -- Wedding Dress, Engagement Dress, Veil, Jewelry
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_item_models
+        id (PK)
+        tenant_id                   FK tenants(id)
+        title                       varchar(150) not null   -- model / designer name
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_items
+        id (PK)
+        tenant_id                   FK tenants(id)
+        sku                         varchar(100) unique     -- [{PREFIX}{YEAR}-{000001}] e.g. ADF26-0001
+        name                        varchar(255) not null
+        barcode                     varchar(100) nullable
+
+        main_category_id            FK inventory_main_categories(id)
+        sub_category_id             FK inventory_sub_categories(id)
+        item_type_id                FK inventory_item_types(id)
+        item_model_id               FK inventory_item_models(id)
+
+        -- Bridal attributes
+        size                        varchar(30)             -- S, M, L, 38, 40, custom
+        color                       varchar(50)
+        fabric                      varchar(100)
+        season                      varchar(50)             -- Spring 2026, Winter Collection
+        purpose                     enum('sale','rental','both') default 'both'
+
+        description                 text
+        components                  text                    -- included pieces / accessories with dress
+        custom_fields               jsonb
+        quality                     enum('high','medium','normal','low') default 'normal'
+        reorder_level               numeric(10,2) default 0
+
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+
+        -- Sales pricing
+        sales_currency_id           FK currencies(id)
+        sales_unit_price            numeric(18,2) default 0
+        sales_unit_id               FK units(id)
+
+        -- Rental pricing
+        rental_currency_id          FK currencies(id)
+        rental_price                numeric(18,2) default 0     -- price per rental period
+        rental_period_days          int default 3
+        rental_deposit_amount       numeric(18,2) default 0
+        rental_late_fee_per_day     numeric(18,2) default 0
+
+        -- Purchase / cost basis (opening or last purchase)
+        purchase_opening_date       date
+        purchase_date               date
+        purchase_unit_id            FK units(id)
+        purchase_amount             numeric(18,2) not null default 0
+        purchase_other_cost         numeric(18,2) default 0
+        purchase_currency_id        FK currencies(id)
+        purchase_exchange_rate      numeric(18,6) default 1
+
+        -- Website / showcase flags (optional storefront)
+        is_featured                 boolean default false
+        is_hot                      boolean default false
+        is_trending                 boolean default false
+        is_wanted                   boolean default false
+
+        repair_note                 varchar(512)
+        status                      enum('available','reserved','rented','sold','repairing','damaged','disposed') default 'available'
+
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_item_media
+        id (PK)
+        tenant_id                   FK tenants(id)
+        inventory_item_id           FK inventory_items(id)
+        file_path                   varchar(255) not null
+        title                       varchar(255)
+        sort_order                  int default 0
+        is_main                     boolean default false
+        created_by                  FK users(id)
+        created_at
+
+
+    inventory_stock_transactions
+        id (PK)
+        tenant_id                   FK tenants(id)
+        transaction_number          varchar(100) unique     -- TRN26-000001
+        inventory_item_id           FK inventory_items(id)
+        warehouse_id                FK warehouses(id)
+        branch_id                   FK branches(id)
+
+        type                        enum(
+                                        'stock_in',         -- purchase / opening
+                                        'stock_out',        -- sale / dispose
+                                        'adjustment',       -- count correction (+/-)
+                                        'transfer_in',
+                                        'transfer_out',
+                                        'reserve',          -- hold for booking
+                                        'release',          -- un-hold
+                                        'rent_out',         -- dress left shop
+                                        'rent_return'       -- dress returned
+                                    )
+
+        quantity                    numeric(18,2) not null
+            -- positive: stock_in, transfer_in, release, rent_return, adjustment+
+            -- negative: stock_out, transfer_out, reserve, rent_out, adjustment-
+
+        unit_cost                   numeric(18,2) default 0
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+
+        reference_type              varchar(50)             -- sales_order, purchase_order, adjustment, transfer
+        reference_id                int nullable
+        note                        text
+
+        created_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_adjustments
+        id (PK)
+        tenant_id                   FK tenants(id)
+        adjustment_number           varchar(100) unique     -- ADJ26-0001
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        reason                      enum('count_mismatch','damage','lost','found','other') default 'other'
+        note                        text
+        attachment_path             varchar(255)
+        status                      enum('draft','posted','cancelled') default 'draft'
+        posted_at                   timestamptz
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_adjustment_items
+        id (PK)
+        adjustment_id               FK inventory_adjustments(id)
+        inventory_item_id           FK inventory_items(id)
+        expected_qty                numeric(18,2)
+        counted_qty                 numeric(18,2)
+        difference_qty              numeric(18,2)           -- counted - expected
+        note                        text
+
+
+    inventory_transfers
+        id (PK)
+        tenant_id                   FK tenants(id)
+        transfer_number             varchar(100) unique     -- TRF26-0001
+        from_warehouse_id           FK warehouses(id)
+        to_warehouse_id             FK warehouses(id)
+        from_branch_id              FK branches(id)
+        to_branch_id                FK branches(id)
+        note                        text
+        status                      enum('draft','in_transit','received','cancelled') default 'draft'
+        transferred_at              timestamptz
+        received_at                 timestamptz
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    inventory_transfer_items
+        id (PK)
+        transfer_id                 FK inventory_transfers(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,2) not null
+        note                        text
+
+
+    -- Optional: dedicated reservation rows for calendar / booking UI
+    inventory_reservations
+        id (PK)
+        tenant_id                   FK tenants(id)
+        inventory_item_id           FK inventory_items(id)
+        warehouse_id                FK warehouses(id)
+        sales_order_id              FK sales_orders(id) nullable
+        reserved_quantity           numeric(18,2) not null default 1
+        reserved_from               date not null           -- event / rental start
+        reserved_to                 date not null
+        status                      enum('active','fulfilled','released','cancelled') default 'active'
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at

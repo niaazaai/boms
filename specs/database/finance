@@ -1,0 +1,213 @@
+----------------------------------------------------------------------------------
+FINANCE MODULE
+(5 pillars for bridal shop owner — end-of-day profit / loss at a glance)
+----------------------------------------------------------------------------------
+
+    -- FIVE PILLARS (owner dashboard):
+    --   1. Cash & Banks     → how much money is available now
+    --   2. Income           → sales + rental revenue (+ other income)
+    --   3. Expenses         → shop costs (rent, salary, repair, ads, …)
+    --   4. Accounts Payable → what we owe suppliers
+    --   5. Accounts Receivable → what customers still owe us (balances / deposits due)
+    --
+    -- Daily P&L (computed, not a table):
+    --   Profit = Income − Expenses − COGS (from sold/rented item costs)
+    -- Keep entries simple — shop owner should not need an accountant daily.
+
+
+    finance_accounts
+        id (PK)
+        tenant_id                   FK tenants(id)
+        code                        varchar(30)             -- CASH-MAIN, BANK-AZIZI
+        name                        varchar(150) not null   -- Cash Drawer, Bank Account
+        account_type                enum('cash','bank','wallet','other') default 'cash'
+        currency_id                 FK currencies(id)
+        opening_balance             numeric(18,2) default 0
+        current_balance             numeric(18,2) default 0 -- maintained by postings
+        branch_id                   FK branches(id) nullable
+        is_default                  boolean default false
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    finance_categories
+        id (PK)
+        tenant_id                   FK tenants(id)
+        kind                        enum('income','expense') not null
+        code                        varchar(30)
+        name                        varchar(150) not null
+            -- income examples: dress_sale, rental_fee, late_fee, other_income
+            -- expense examples: shop_rent, salary, utilities, repair, marketing, transport
+        parent_id                   FK finance_categories(id) nullable
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    -- Unified money movement ledger (simple, auditable)
+    finance_transactions
+        id (PK)
+        tenant_id                   FK tenants(id)
+        transaction_number          varchar(100) unique     -- FIN26-000001
+        transaction_date            date not null
+        direction                   enum('in','out') not null
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null  -- in tenant default currency
+
+        finance_account_id          FK finance_accounts(id)
+        category_id                 FK finance_categories(id) nullable
+        payment_method_id           FK payment_methods(id)
+
+        -- Link back to source documents
+        reference_type              varchar(50)
+            -- sales_order_payment, sales_return, purchase_payment,
+            -- expense, income, transfer, opening
+        reference_id                int nullable
+
+        counterparty_type           enum('customer','supplier','staff','other','none') default 'none'
+        counterparty_id             int nullable
+        counterparty_name           varchar(255)
+
+        branch_id                   FK branches(id)
+        note                        text
+        attachment_path             varchar(255)
+        status                      enum('draft','posted','void') default 'posted'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    finance_expenses
+        id (PK)
+        tenant_id                   FK tenants(id)
+        expense_number              varchar(100) unique     -- EXP26-0001
+        expense_date                date not null
+        category_id                 FK finance_categories(id)  -- kind=expense
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        finance_account_id          FK finance_accounts(id)
+        payment_method_id           FK payment_methods(id)
+        vendor_name                 varchar(255)            -- free text if no supplier
+        supplier_id                 FK procurement_suppliers(id) nullable
+        branch_id                   FK branches(id)
+        note                        text
+        attachment_path             varchar(255)
+        status                      enum('draft','posted','void') default 'posted'
+        finance_transaction_id      FK finance_transactions(id) nullable
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    finance_other_income
+        id (PK)
+        tenant_id                   FK tenants(id)
+        income_number               varchar(100) unique     -- INC26-0001
+        income_date                 date not null
+        category_id                 FK finance_categories(id)  -- kind=income
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        finance_account_id          FK finance_accounts(id)
+        payment_method_id           FK payment_methods(id)
+        branch_id                   FK branches(id)
+        note                        text
+        status                      enum('draft','posted','void') default 'posted'
+        finance_transaction_id      FK finance_transactions(id) nullable
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    -- Pillar 4: what we owe (often auto from unpaid POs; manual rows allowed)
+    finance_payables
+        id (PK)
+        tenant_id                   FK tenants(id)
+        payable_number              varchar(100) unique     -- AP26-0001
+        supplier_id                 FK procurement_suppliers(id)
+        purchase_order_id           FK procurement_purchase_orders(id) nullable
+        invoice_no                  varchar(100)
+        issue_date                  date not null
+        due_date                    date
+        currency_id                 FK currencies(id)
+        original_amount             numeric(18,2) not null
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) not null
+        status                      enum('open','partial','paid','void') default 'open'
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    -- Pillar 5: what customers owe us
+    finance_receivables
+        id (PK)
+        tenant_id                   FK tenants(id)
+        receivable_number           varchar(100) unique     -- AR26-0001
+        customer_id                 FK sales_customers(id)
+        sales_order_id              FK sales_orders(id) nullable
+        issue_date                  date not null
+        due_date                    date
+        currency_id                 FK currencies(id)
+        original_amount             numeric(18,2) not null
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) not null
+        status                      enum('open','partial','paid','void') default 'open'
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    -- Internal transfer between cash/bank accounts (not income/expense)
+    finance_account_transfers
+        id (PK)
+        tenant_id                   FK tenants(id)
+        transfer_number             varchar(100) unique     -- FTR26-0001
+        transfer_date               date not null
+        from_account_id             FK finance_accounts(id)
+        to_account_id               FK finance_accounts(id)
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        note                        text
+        status                      enum('posted','void') default 'posted'
+        created_by                  FK users(id)
+        created_at
+
+
+    -- Optional saved daily snapshot for fast owner dashboard history
+    finance_daily_summaries
+        id (PK)
+        tenant_id                   FK tenants(id)
+        summary_date                date not null
+        branch_id                   FK branches(id) nullable  -- null = all branches
+        currency_id                 FK currencies(id)
+
+        cash_balance                numeric(18,2) default 0
+        income_total                numeric(18,2) default 0
+        expense_total               numeric(18,2) default 0
+        cogs_total                  numeric(18,2) default 0
+        gross_profit                numeric(18,2) default 0
+        net_profit                  numeric(18,2) default 0
+        receivables_balance         numeric(18,2) default 0
+        payables_balance            numeric(18,2) default 0
+
+        sales_count                 int default 0
+        rental_count                int default 0
+        created_at
+        -- unique (tenant_id, summary_date, branch_id, currency_id)

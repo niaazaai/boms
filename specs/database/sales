@@ -1,0 +1,161 @@
+----------------------------------------------------------------------------------
+SALES MODULE
+(easy sale + rental + return for bridal shops — mobile-first cashier flow)
+----------------------------------------------------------------------------------
+
+    -- Sales types:
+    --   sale   = customer buys the dress / accessory
+    --   rental = customer rents for event dates, returns after
+    -- Keep checkout simple: pick customer → add items → deposit/pay → done.
+
+
+    sales_customers
+        id (PK)
+        tenant_id                   FK tenants(id)
+        customer_code               varchar(50)             -- CUS26-0001
+        name                        varchar(255) not null
+        phone                       varchar(50)             -- primary search key for shop staff
+        phone_alt                   varchar(50)
+        email                       varchar(255)
+        gender                      enum('female','male','other') nullable
+        wedding_date                date nullable           -- bridal context
+        address                     text
+        note                        text
+        custom_fields               jsonb
+        payment_term_id             FK payment_terms(id)
+        branch_id                   FK branches(id)
+        status                      enum('active','inactive') default 'active'
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- index (tenant_id, phone)
+
+
+    sales_orders
+        id (PK)
+        tenant_id                   FK tenants(id)
+        order_number                varchar(100) unique     -- SO26-000001
+        order_type                  enum('sale','rental') not null
+        customer_id                 FK sales_customers(id)
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+
+        order_date                  date not null
+        event_date                  date nullable           -- wedding / party date
+        -- Rental window (required when order_type = rental)
+        rental_start_date           date nullable
+        rental_end_date             date nullable
+        actual_return_date          date nullable
+
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+
+        subtotal                    numeric(18,2) default 0
+        discount_amount             numeric(18,2) default 0
+        discount_percent            numeric(5,2) default 0
+        tax_amount                  numeric(18,2) default 0
+        deposit_required            numeric(18,2) default 0
+        late_fee_amount             numeric(18,2) default 0
+        other_charges               numeric(18,2) default 0
+        total_amount                numeric(18,2) default 0
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) default 0 -- total - paid (AR)
+
+        payment_method_id           FK payment_methods(id)
+        payment_term_id             FK payment_terms(id)
+        payment_status              enum('unpaid','partial','paid','refunded') default 'unpaid'
+
+        status                      enum(
+                                        'draft',
+                                        'confirmed',        -- stock reserved
+                                        'out',              -- rented out / delivered
+                                        'returned',         -- rental returned
+                                        'completed',        -- sale finished or rental closed
+                                        'cancelled'
+                                    ) default 'draft'
+
+        return_condition            enum('good','needs_cleaning','damaged','lost') nullable
+        return_note                 text
+        note                        text
+
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    sales_order_items
+        id (PK)
+        tenant_id                   FK tenants(id)
+        sales_order_id              FK sales_orders(id)
+        inventory_item_id           FK inventory_items(id)
+        item_name_snapshot          varchar(255)            -- freeze name at sale time
+        sku_snapshot                varchar(100)
+
+        line_type                   enum('sale','rental') not null
+        quantity                    numeric(18,2) not null default 1
+        unit_price                  numeric(18,2) not null  -- sale price or rental price
+        discount_amount             numeric(18,2) default 0
+        line_total                  numeric(18,2) not null
+        unit_cost_snapshot          numeric(18,2) default 0 -- for profit calc
+
+        -- Rental line extras
+        rental_start_date           date nullable
+        rental_end_date             date nullable
+        deposit_amount              numeric(18,2) default 0
+
+        returned_quantity           numeric(18,2) default 0
+        note                        text
+        created_at
+        updated_at
+
+
+    sales_order_payments
+        id (PK)
+        tenant_id                   FK tenants(id)
+        sales_order_id              FK sales_orders(id)
+        payment_number              varchar(100) unique     -- PAY26-0001
+        payment_type                enum('deposit','installment','full','refund','late_fee') default 'full'
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        payment_method_id           FK payment_methods(id)
+        finance_account_id          FK finance_accounts(id) -- cash drawer / bank
+        paid_at                     timestamptz not null
+        reference_no                varchar(100)            -- receipt / transfer ref
+        note                        text
+        created_by                  FK users(id)
+        created_at
+
+
+    sales_returns
+        id (PK)
+        tenant_id                   FK tenants(id)
+        return_number               varchar(100) unique     -- RET26-0001
+        sales_order_id              FK sales_orders(id)
+        customer_id                 FK sales_customers(id)
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        return_date                 date not null
+        reason                      enum('wrong_item','damaged','customer_change','other') default 'other'
+        refund_amount               numeric(18,2) default 0
+        restock                     boolean default true
+        status                      enum('draft','posted','cancelled') default 'draft'
+        note                        text
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+
+
+    sales_return_items
+        id (PK)
+        sales_return_id             FK sales_returns(id)
+        sales_order_item_id         FK sales_order_items(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,2) not null
+        unit_price                  numeric(18,2) not null
+        line_total                  numeric(18,2) not null
+        condition                   enum('good','damaged','unusable') default 'good'
+        note                        text
