@@ -1,25 +1,21 @@
-# Wireframes index
+# Wireframes
 
-Clean mobile-first wireframes for BOMS (bridal rental + sale).
+| Folder | Contents |
+|--------|----------|
+| [`mobile/`](./mobile/) | Mobile-first phone frames (375×812) |
+| [`desktop/`](./desktop/) | Desktop browser frames (1280×800 + sidebar) |
 
-Reference Excalidraw files under `specs/reference_to_remove_later/wireframes/` were from a full SCM ERP. These replace them with a simpler bridal-shop IA.
+Each folder:
 
-| # | File | Module |
-|---|------|--------|
-| 1 | [01-auth.md](./01-auth.md) | Login, register, invite |
-| 2 | [02-platform-settings.md](./02-platform-settings.md) | Home shell, tenant, settings |
-| 3 | [03-inventory.md](./03-inventory.md) | Items, stock, adjust, transfer |
-| 4 | [04-sales.md](./04-sales.md) | Sale, rental, return, customers |
-| 5 | [05-procurement.md](./05-procurement.md) | Suppliers, PO, receive, pay |
-| 6 | [06-finance.md](./06-finance.md) | 5 pillars + P&L |
+- `01-Auth.excalidraw`
+- `02-Platform-Settings.excalidraw`
+- `03-Inventory.excalidraw`
+- `04-Sales.excalidraw`
+- `05-Procurement.excalidraw`
+- `06-Finance.excalidraw`
 
-End-to-end charts: [`../flows/application-flows.md`](../flows/application-flows.md)
+Regenerate:
 
-## UX principles (all screens)
-
-- Mobile first, large taps, bottom navigation
-- Phone-number search for customers (not email-first)
-- Rental calendar conflict check before confirm
-- Owner home = profit + cash + due returns in one glance
-- RTL-ready (Dari / Pashto / Arabic)
-- Avoid multi-step approvals unless voiding money/stock
+```bash
+python3 .agent/scripts/generate_wireframes.py
+```

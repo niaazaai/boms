@@ -8,9 +8,12 @@ Mobile-first system for bridal shops that **rent** clothes and **sell** bride dr
 | Area | Path |
 |------|------|
 | Database schemas | [`specs/database/`](./specs/database/) |
-| Wireframes | [`specs/wireframes/`](./specs/wireframes/) |
+| Wireframes (Excalidraw) | [`specs/wireframes/mobile/`](./specs/wireframes/mobile/) · [`specs/wireframes/desktop/`](./specs/wireframes/desktop/) |
 | App flows | [`specs/flows/application-flows.md`](./specs/flows/application-flows.md) |
 | Feature specs (agent order) | [`specs/features/`](./specs/features/) |
+| Agent skills & docs | [`.agent/`](./.agent/) |
+
+Regenerate wireframes: `python3 .agent/scripts/generate_wireframes.py`
 
 Stack, language, and infrastructure: **deferred** — discuss next.
 
