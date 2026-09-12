@@ -142,6 +142,56 @@ def chip(x, y, label: str, color: str = OK, g=None):
     ]
 
 
+def search_bar(x, y, w, placeholder: str, g=None):
+    g = g or []
+    return [
+        rect(x, y, w, 36, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=g),
+        text(x + 10, y + 10, f"🔍 {placeholder}", size=13, color=LINE, width=w - 20),
+    ]
+
+
+def filter_chips(x, y, labels: list[str], g=None):
+    g = g or []
+    els = []
+    xx = x
+    for i, lab in enumerate(labels):
+        w = max(64, len(lab) * 7 + 16)
+        bg = SOFT if i else "#ccfbf1"
+        fg = MUTED if i else ACCENT
+        els.append(rect(xx, y, w, 28, strokeColor=LINE if i else ACCENT, backgroundColor=bg, strokeWidth=1, groupIds=g))
+        els.append(text(xx + 8, y + 6, lab, size=12, color=fg, width=w - 16))
+        xx += w + 8
+    return els
+
+
+def page_header(x, y, w, title: str, actions: list[tuple[str, bool]], g=None):
+    """Title left, action buttons right. Returns (els, y_after)."""
+    g = g or []
+    els = [text(x, y + 4, title, size=22, color=INK)]
+    bx = x + w
+    for label, primary in reversed(actions):
+        bw = max(110, len(label) * 8 + 24)
+        bx -= bw
+        els += btn(bx, y, bw, 36, label, primary, g)
+        bx -= 10
+    return els, y + 52
+
+
+def note(x, y, w, content: str, g=None):
+    g = g or []
+    return [
+        rect(x, y, w, 36, strokeColor=ACCENT, backgroundColor="#ecfdf5", strokeWidth=1, groupIds=g),
+        text(x + 12, y + 10, content, size=12, color=ACCENT, width=w - 24),
+    ]
+
+
+ROW_GAP = 160
+
+
+def grid_pos(i: int, cols: int, frame_w: float, frame_h: float):
+    return (i % cols) * (frame_w + GAP_X), (i // cols) * (frame_h + ROW_GAP)
+
+
 def doc(elements: list) -> dict:
     return {
         "type": "excalidraw",
@@ -229,141 +279,186 @@ def desk_shell(ox, oy, title: str, active_nav: str, group: str, show_sidebar: bo
 # ═══════════════════════════════════════════════════════════════
 
 def m_auth():
-    els = [text(0, -80, "BOMS Mobile — Auth", size=28, color=INK)]
+    els = [text(0, -80, "BOMS Mobile — Auth & Authorization", size=28, color=INK)]
+    # 1. Login only (public)
     g = nid()
-    pe, cx, cy, cw = phone_shell(0, 0, "1. Welcome", g)
+    pe, cx, cy, cw = phone_shell(0, 0, "1. Login (public only)", g)
     els += pe
-    els.append(text(cx, cy + 80, "BOMS", size=32, color=ACCENT, width=cw, align="center"))
-    els.append(text(cx, cy + 130, "Bridal Shop Manager", size=16, color=INK, width=cw, align="center"))
-    els.append(text(cx, cy + 170, "Rentals · Sales · Daily profit", size=13, color=MUTED, width=cw, align="center"))
-    els += btn(cx, cy + 280, cw, 48, "Login to shop", True, [g])
-    els += btn(cx, cy + 344, cw, 48, "Register new shop", False, [g])
-    els.append(text(cx, cy + 420, "Language: EN | دری | پښتو", size=12, color=MUTED, width=cw, align="center"))
+    els.append(text(cx, cy + 40, "BOMS", size=28, color=ACCENT, width=cw, align="center"))
+    els.append(text(cx, cy + 80, "Sign in to continue", size=14, color=MUTED, width=cw, align="center"))
+    f, y = field(cx, cy + 130, cw, "Phone or Email", "0700 000 0000", [g])
+    els += f
+    f, y = field(cx, y + 4, cw, "Password", "••••••••", [g])
+    els += f
+    els.append(text(cx, y + 6, "Forgot password?", size=13, color=ACCENT))
+    els += btn(cx, y + 40, cw, 48, "Sign in", True, [g])
+    els.append(text(cx, y + 110, "No public register — tenants\nare created by Super Admin", size=11, color=MUTED, width=cw, align="center"))
 
+    # 2. Forgot password
     x = PHONE_W + GAP_X
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "2. Login", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "2. Forgot password", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Back", size=14, color=MUTED))
-    els.append(text(cx, cy + 50, "Login", size=24, color=INK, width=cw, align="center"))
-    f, y = field(cx, cy + 110, cw, "Phone or Email", "0700 000 0000", [g])
+    els.append(text(cx, cy + 20, "Reset password", size=20, color=INK))
+    f, y = field(cx, cy + 70, cw, "Phone or Email", "", [g])
     els += f
-    f, y = field(cx, y + 8, cw, "Password", "••••••••", [g])
-    els += f
-    els.append(text(cx, y + 8, "Forgot password?", size=13, color=ACCENT))
-    els += btn(cx, y + 48, cw, 48, "Sign in", True, [g])
+    els += btn(cx, y + 16, cw, 48, "Send reset code", True, [g])
 
+    # 3. Accept invite
     x = 2 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "3. Forgot password", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "3. Accept invite", g)
     els += pe
-    els.append(text(cx, cy + 20, "Reset password", size=22, color=INK))
-    f, y = field(cx, cy + 80, cw, "Phone or Email", "", [g])
-    els += f
-    els += btn(cx, y + 20, cw, 48, "Send reset code", True, [g])
-
-    x = 3 * (PHONE_W + GAP_X)
-    g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "4. Register shop", g)
-    els += pe
-    els.append(text(cx, cy + 8, "Create your shop · Step 1/3", size=16, color=INK))
-    f, y = field(cx, cy + 50, cw, "Shop name *", "Al Dubai Bridal", [g])
-    els += f
-    f, y = field(cx, y, cw, "Shop code *", "ADF", [g])
-    els += f
-    f, y = field(cx, y, cw, "Phone *", "", [g])
-    els += f
-    els.append(text(cx, y + 4, "Business: (•) Both  ( ) Sale  ( ) Rental", size=12, color=INK, width=cw))
-    els += btn(cx, y + 50, cw, 48, "Continue", True, [g])
-
-    x = 4 * (PHONE_W + GAP_X)
-    g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "5. Accept invite", g)
-    els += pe
-    els.append(text(cx, cy + 40, "Join Al Dubai Bridal", size=20, color=INK, width=cw, align="center"))
-    els.append(text(cx, cy + 80, "Invited as: Cashier", size=14, color=MUTED, width=cw, align="center"))
-    f, y = field(cx, cy + 130, cw, "Your name", "", [g])
+    els.append(text(cx, cy + 24, "Join Al Dubai Bridal", size=18, color=INK, width=cw, align="center"))
+    els.append(text(cx, cy + 56, "Role: Cashier", size=13, color=MUTED, width=cw, align="center"))
+    f, y = field(cx, cy + 100, cw, "Your name", "", [g])
     els += f
     f, y = field(cx, y, cw, "Set password", "", [g])
     els += f
-    els += btn(cx, y + 24, cw, 48, "Join shop", True, [g])
+    els += btn(cx, y + 20, cw, 48, "Join tenant", True, [g])
 
-    els += flow_arrows(5, PHONE_W, TITLE_H + PHONE_H / 2)
+    # 4. Users list
+    x = 3 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "4. Users list", g)
+    els += pe
+    els.append(text(cx, cy + 4, "Users                         +", size=16, color=INK, width=cw))
+    els += search_bar(cx, cy + 36, cw, "Name / phone / email", [g])
+    els += filter_chips(cx, cy + 80, ["All", "Active", "Invited", "Role▾"], [g])
+    for i, (name, role) in enumerate([("Ahmad · Owner", "Active"), ("Laila · Cashier", "Active"), ("Omar · Staff", "Invited")]):
+        yy = cy + 120 + i * 72
+        els.append(rect(cx, yy, cw, 64, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 8, name, size=13, color=INK))
+        els += chip(cx + 10, yy + 32, role, OK if role == "Active" else WARN, [g])
+        els.append(text(cx + cw - 90, yy + 22, "⋮ Edit", size=12, color=MUTED))
+
+    # 5. User create / actions
+    x = 4 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "5. User form / actions", g)
+    els += pe
+    els.append(text(cx, cy + 4, "← Create user", size=16, color=INK))
+    f, y = field(cx, cy + 40, cw, "Name *", "Laila", [g])
+    els += f
+    f, y = field(cx, y, cw, "Phone / Email *", "", [g])
+    els += f
+    f, y = field(cx, y, cw, "Role *", "Cashier ▾", [g])
+    els += f
+    f, y = field(cx, y, cw, "Default branch", "Main ▾", [g])
+    els += f
+    els += btn(cx, y + 8, cw, 40, "Save user", True, [g])
+    els += btn(cx, y + 56, cw, 36, "Send invitation", False, [g])
+    els += btn(cx, y + 100, cw, 36, "Change role", False, [g])
+    els += btn(cx, y + 144, cw, 36, "Delete / Deactivate", False, [g])
+
+    # 6. Roles & permissions
+    x = 5 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "6. Roles & permissions", g)
+    els += pe
+    els.append(text(cx, cy + 4, "Roles                          +", size=16, color=INK, width=cw))
+    els += search_bar(cx, cy + 36, cw, "Role name", [g])
+    for i, (name, sub) in enumerate([("Owner · system", "All permissions"), ("Manager", "24 permissions"), ("Cashier", "12 permissions")]):
+        yy = cy + 84 + i * 70
+        els.append(rect(cx, yy, cw, 62, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 12, f"{name}\n{sub}", size=13, color=INK))
+    els.append(text(cx, cy + 310, "Edit role → permission matrix\nView · Create · Edit · Void / module", size=12, color=MUTED, width=cw))
+
+    els += flow_arrows(6, PHONE_W, TITLE_H + PHONE_H / 2)
     return doc(els)
 
 
 def m_platform():
     els = [text(0, -80, "BOMS Mobile — Platform / Settings", size=28, color=INK)]
+    # 1. Settings hub
     g = nid()
-    pe, cx, cy, cw = phone_shell(0, 0, "1. Home dashboard", g)
+    pe, cx, cy, cw = phone_shell(0, 0, "1. Settings hub", g)
     els += pe
-    els.append(text(cx, cy + 4, "Al Dubai Bridal          🔔 👤", size=13, color=INK, width=cw))
-    card_w = (cw - 8) / 2
-    for i, (t, v, c) in enumerate([("Profit", "+2.4k", OK), ("Cash", "18.2k", ACCENT), ("A/R", "3.1k", WARN), ("A/P", "1.2k", DANGER)]):
-        xx = cx + (i % 2) * (card_w + 8)
-        yy = cy + 40 + (i // 2) * 70
-        els.append(rect(xx, yy, card_w, 62, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-        els.append(text(xx + 10, yy + 8, t, size=11, color=MUTED))
-        els.append(text(xx + 10, yy + 28, v, size=18, color=c))
-    els += btn(cx, cy + 200, (cw - 8) / 2, 40, "+ Sale", True, [g])
-    els += btn(cx + (cw - 8) / 2 + 8, cy + 200, (cw - 8) / 2, 40, "+ Rent", False, [g])
-    els.append(text(cx, cy + 260, "Due returns\n👗 Sara — due today", size=13, color=INK, width=cw))
-    els += nav_bar(0, "Home", [g])
+    els.append(text(cx, cy + 4, "Settings", size=20, color=INK))
+    items = [
+        "Tenants (Super Admin) ›",
+        "Tenant profile ›",
+        "Branches & warehouses ›",
+        "Currencies ›",
+        "Units ›",
+        "Payment methods ›",
+        "Payment terms ›",
+        "Preferences ›",
+        "Languages ›",
+        "Audit log ›",
+    ]
+    for i, it in enumerate(items):
+        yy = cy + 40 + i * 36
+        els.append(rect(cx, yy, cw, 32, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 8, it, size=12, color=INK))
+    els += nav_bar(0, "More", [g])
 
+    # 2. Tenants list
     x = PHONE_W + GAP_X
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "2. Settings hub", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "2. Tenants (Super Admin)", g)
     els += pe
-    els.append(text(cx, cy + 8, "Settings", size=22, color=INK))
-    for i, it in enumerate(["Shop profile ›", "Branches & warehouses ›", "Users & roles ›", "Currencies ›", "Units ›", "Payment methods ›", "Preferences ›"]):
-        yy = cy + 50 + i * 40
-        els.append(rect(cx, yy, cw, 36, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 12, yy + 10, it, size=13, color=INK))
-    els += nav_bar(x, "More", [g])
+    els.append(text(cx, cy + 4, "Tenants                       +", size=16, color=INK, width=cw))
+    els += search_bar(cx, cy + 36, cw, "Name / code", [g])
+    els += filter_chips(cx, cy + 80, ["All", "Shop", "Mall", "Active"], [g])
+    for i, row in enumerate(["ADF · Al Dubai · Shop", "KBM · Kabul Mall · Mall"]):
+        yy = cy + 120 + i * 70
+        els.append(rect(cx, yy, cw, 62, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 18, row, size=13, color=INK))
 
+    # 3. Tenant profile
     x = 2 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "3. Shop profile", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "3. Tenant profile", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Shop profile", size=16, color=INK))
-    f, y = field(cx, cy + 50, cw, "Name", "Al Dubai Bridal", [g])
+    els.append(text(cx, cy + 4, "← Tenant profile", size=16, color=INK))
+    f, y = field(cx, cy + 40, cw, "Name *", "Al Dubai Bridal", [g])
     els += f
-    f, y = field(cx, y, cw, "Code", "ADF", [g])
+    f, y = field(cx, y, cw, "Code * / Type", "ADF · Shop ▾", [g])
     els += f
-    f, y = field(cx, y, cw, "Phone", "", [g])
+    f, y = field(cx, y, cw, "Contact phone / email", "", [g])
     els += f
-    els += btn(cx, y + 20, cw, 48, "Save", True, [g])
+    f, y = field(cx, y, cw, "Address", "Kabul · Street…", [g])
+    els += f
+    els += btn(cx, y + 12, cw, 44, "Save", True, [g])
 
+    # 4. Branches + warehouses
     x = 3 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "4. Branches", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "4. Branch → warehouses", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Branches                    +", size=16, color=INK, width=cw))
-    for i, (name, sub) in enumerate([("Main Branch (default)", "2 warehouses"), ("Second Floor", "1 warehouse")]):
-        yy = cy + 50 + i * 80
-        els.append(rect(cx, yy, cw, 70, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 12, yy + 16, f"{name}\n{sub}", size=14, color=INK))
+    els.append(text(cx, cy + 4, "← Main Branch              +", size=15, color=INK, width=cw))
+    els.append(text(cx, cy + 36, "Warehouses (1 branch → many)", size=12, color=MUTED, width=cw))
+    for i, (name, sub) in enumerate([("WH-A Default", "Main floor"), ("WH-B Storage", "Back room"), ("WH-C Repair", "Tailor desk")]):
+        yy = cy + 64 + i * 72
+        els.append(rect(cx, yy, cw, 64, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 14, f"{name}\n{sub}", size=13, color=INK))
 
+    # 5. Master data sample
     x = 4 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "5. Users & roles", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "5. Master data (CRUD)", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Users                       +", size=16, color=INK, width=cw))
-    for i, (name, role) in enumerate([("Ahmad · Owner", "Active"), ("Laila · Cashier", "Active"), ("Omar · Staff", "Invited")]):
-        yy = cy + 50 + i * 64
-        els.append(rect(cx, yy, cw, 56, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 12, yy + 10, name, size=14, color=INK))
-        els += chip(cx + 12, yy + 30, role, OK if role == "Active" else WARN, [g])
+    els.append(text(cx, cy + 4, "Currencies                    +", size=15, color=INK, width=cw))
+    els += search_bar(cx, cy + 36, cw, "Code / name", [g])
+    els.append(rect(cx, cy + 84, cw, 52, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 10, cy + 100, "AFN · Default · Edit · Del", size=13, color=INK))
+    els.append(rect(cx, cy + 144, cw, 52, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 10, cy + 160, "USD · rate 70.5 · Edit · Del", size=13, color=INK))
+    els.append(text(cx, cy + 220, "Same list pattern for:\nUnits · Pay methods · Terms\nLanguages · Preferences", size=12, color=MUTED, width=cw))
 
+    # 6. Audit log
     x = 5 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "6. Currencies", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "6. Audit log", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Currencies                  +", size=16, color=INK, width=cw))
-    els.append(rect(cx, cy + 50, cw, 56, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 12, cy + 66, "AFN · Default", size=14, color=INK))
-    els.append(rect(cx, cy + 116, cw, 56, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 12, cy + 132, "USD · rate 70.5", size=14, color=INK))
+    els.append(text(cx, cy + 4, "← Audit log", size=16, color=INK))
+    els += search_bar(cx, cy + 36, cw, "User / action", [g])
+    els += filter_chips(cx, cy + 80, ["All", "Login", "Settings"], [g])
+    for i, row in enumerate(["Ahmad · login · 09:12", "Ahmad · tenant edit", "Laila · role change"]):
+        yy = cy + 120 + i * 56
+        els.append(rect(cx, yy, cw, 48, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 14, row, size=12, color=INK))
 
     els += flow_arrows(6, PHONE_W, TITLE_H + PHONE_H / 2)
     return doc(els)
@@ -636,132 +731,441 @@ def table_row(x, y, w, label, g, h=40):
 
 
 def d_auth():
-    els = [text(0, -80, "BOMS Desktop — Auth (centered cards, no sidebar)", size=28, color=INK)]
-    # Welcome
-    g = nid()
-    pe, cx, cy, cw, ch = desk_shell(0, 0, "1. Welcome", "Home", g, show_sidebar=False)
-    els += pe
+    """Public login only + in-app users / roles & permissions."""
+    els = [text(0, -100, "BOMS Desktop — Auth & Authorization", size=28, color=INK)]
+    els.append(
+        text(
+            0,
+            -60,
+            "Public: Login only. Users & Roles live behind auth (Owner/Admin). Tenant self-signup removed — Super Admin creates tenants in Settings.",
+            size=14,
+            color=MUTED,
+            width=2400,
+        )
+    )
     card_w = 420
-    card_x = cx + (cw - card_w) / 2
-    els.append(rect(card_x, cy + 80, card_w, 420, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
-    els.append(text(card_x + 40, cy + 140, "BOMS", size=36, color=ACCENT, width=card_w - 80, align="center"))
-    els.append(text(card_x + 40, cy + 200, "Bridal Shop Manager\nRentals · Sales · Daily profit", size=16, color=MUTED, width=card_w - 80, align="center"))
-    els += btn(card_x + 60, cy + 300, card_w - 120, 48, "Login to shop", True, [g])
-    els += btn(card_x + 60, cy + 364, card_w - 120, 48, "Register new shop", False, [g])
 
-    x = DESK_W + GAP_X
+    # ── Row 1: public auth ──
+    # 1. Login only
+    ox, oy = grid_pos(0, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "2. Login", "Home", g, show_sidebar=False)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "1. Login (system entry)", "Home", g, show_sidebar=False)
     els += pe
     card_x = cx + (cw - card_w) / 2
-    els.append(rect(card_x, cy + 60, card_w, 400, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
-    els.append(text(card_x + 40, cy + 90, "Login", size=24, color=INK, width=card_w - 80, align="center"))
-    f, y = field(card_x + 40, cy + 150, card_w - 80, "Phone or Email", "0700…", [g])
+    els.append(rect(card_x, cy + 40, card_w, 460, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
+    els.append(text(card_x + 40, cy + 80, "BOMS", size=32, color=ACCENT, width=card_w - 80, align="center"))
+    els.append(text(card_x + 40, cy + 130, "Sign in to your tenant", size=14, color=MUTED, width=card_w - 80, align="center"))
+    f, y = field(card_x + 40, cy + 180, card_w - 80, "Phone or Email", "0700… / name@mail.com", [g])
     els += f
     f, y = field(card_x + 40, y, card_w - 80, "Password", "••••••••", [g])
     els += f
-    els.append(text(card_x + 40, y + 4, "Forgot password?", size=13, color=ACCENT))
-    els += btn(card_x + 40, y + 40, card_w - 80, 48, "Sign in", True, [g])
+    els.append(text(card_x + 40, y + 6, "Forgot password?", size=13, color=ACCENT))
+    els += btn(card_x + 40, y + 44, card_w - 80, 48, "Sign in", True, [g])
+    els.append(text(card_x + 40, y + 110, "Language: EN | دری | پښتو | عربی", size=12, color=MUTED, width=card_w - 80, align="center"))
+    els += note(card_x + 24, cy + 460, card_w - 48, "Unauthenticated: only this page is visible", [g])
 
-    x = 2 * (DESK_W + GAP_X)
+    # 2. Forgot password
+    ox, oy = grid_pos(1, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "3. Register shop", "Home", g, show_sidebar=False)
-    els += pe
-    card_x = cx + (cw - 520) / 2
-    els.append(rect(card_x, cy + 40, 520, 520, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
-    els.append(text(card_x + 40, cy + 60, "Create your shop · Step 1/3", size=18, color=INK))
-    f, y = field(card_x + 40, cy + 110, 440, "Shop name *", "Al Dubai Bridal", [g])
-    els += f
-    f, y = field(card_x + 40, y, 440, "Shop code *", "ADF", [g])
-    els += f
-    f, y = field(card_x + 40, y, 440, "Phone *", "", [g])
-    els += f
-    f, y = field(card_x + 40, y, 440, "Default currency", "AFN ▾", [g])
-    els += f
-    els.append(text(card_x + 40, y + 8, "Business type: (•) Both  ( ) Sale  ( ) Rental", size=13, color=INK))
-    els += btn(card_x + 40, y + 50, 440, 48, "Continue", True, [g])
-
-    x = 3 * (DESK_W + GAP_X)
-    g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "4. Accept invite", "Home", g, show_sidebar=False)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "2. Forgot password", "Home", g, show_sidebar=False)
     els += pe
     card_x = cx + (cw - card_w) / 2
     els.append(rect(card_x, cy + 80, card_w, 360, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
-    els.append(text(card_x + 40, cy + 120, "Join Al Dubai Bridal\nRole: Cashier", size=18, color=INK, width=card_w - 80, align="center"))
-    f, y = field(card_x + 40, cy + 200, card_w - 80, "Name / Password", "", [g])
+    els.append(text(card_x + 40, cy + 110, "Reset password", size=22, color=INK, width=card_w - 80, align="center"))
+    f, y = field(card_x + 40, cy + 170, card_w - 80, "Phone or Email", "", [g])
     els += f
-    els += btn(card_x + 40, y + 30, card_w - 80, 48, "Join shop", True, [g])
+    els += btn(card_x + 40, y + 24, card_w - 80, 48, "Send reset code / link", True, [g])
+    els.append(text(card_x + 40, y + 90, "← Back to login", size=13, color=ACCENT, width=card_w - 80, align="center"))
 
-    els += flow_arrows(4, DESK_W, TITLE_H + DESK_H / 2)
+    # 3. Accept invite
+    ox, oy = grid_pos(2, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Accept invitation", "Home", g, show_sidebar=False)
+    els += pe
+    card_x = cx + (cw - card_w) / 2
+    els.append(rect(card_x, cy + 60, card_w, 420, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
+    els.append(text(card_x + 40, cy + 90, "Join Al Dubai Bridal", size=20, color=INK, width=card_w - 80, align="center"))
+    els.append(text(card_x + 40, cy + 130, "Invited as Cashier · Branch Main", size=13, color=MUTED, width=card_w - 80, align="center"))
+    f, y = field(card_x + 40, cy + 180, card_w - 80, "Full name *", "", [g])
+    els += f
+    f, y = field(card_x + 40, y, card_w - 80, "Set password *", "", [g])
+    els += f
+    f, y = field(card_x + 40, y, card_w - 80, "Confirm password *", "", [g])
+    els += f
+    els += btn(card_x + 40, y + 24, card_w - 80, 48, "Accept & join", True, [g])
+
+    # 4. Users list
+    ox, oy = grid_pos(3, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Users — list / search / filter", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Users", [("+ Create user", True), ("Send invitation", False)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.42, "Search name / phone / email", [g])
+    els += filter_chips(cx + cw * 0.44, y + 4, ["All", "Active", "Invited", "Inactive", "Role ▾", "Branch ▾"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Name", "Contact", "Role", "Branch", "Status", "Actions"], [g])
+    rows = [
+        "Ahmad Karimi   0700…   Owner     Main   Active    Edit | Change role | Invite | Delete",
+        "Laila Nazari   0780…   Cashier   Main   Active    Edit | Change role | Invite | Delete",
+        "Omar Rahimi    o@…     Staff     Floor2 Invited   Edit | Change role | Resend | Delete",
+        "Sara Admin     s@…     Manager   Main   Active    Edit | Change role | Invite | Delete",
+    ]
+    for i, r in enumerate(rows):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
+    els += note(cx, y + 250, cw, "Row actions: Edit · Delete/Deactivate · Send invitation · Change role", [g])
+
+    # ── Row 2: user form, invite/role, roles list, permissions ──
+    # 5. Create / Edit user
+    ox, oy = grid_pos(4, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Create / Edit user", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Create user", [("Cancel", False), ("Save user", True)], [g])
+    els += he
+    f, y = field(cx, y, 420, "Full name *", "Laila Nazari", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 52, 420, "Phone *", "0780…", [g])
+    els += f
+    f, y = field(cx, y, 420, "Email", "laila@…", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 114, 420, "Role *", "Cashier ▾", [g])
+    els += f
+    f, y = field(cx, y, 420, "Default branch *", "Main ▾", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 176, 420, "Status", "Active ▾", [g])
+    els += f
+    els.append(text(cx, y + 8, "[✓] Send invitation email/SMS after save", size=13, color=INK))
+    els += btn(cx, y + 48, 160, 40, "Save user", True, [g])
+    els += btn(cx + 170, y + 48, 160, 40, "Save & invite", False, [g])
+    els += btn(cx + 340, y + 48, 180, 40, "Deactivate user", False, [g])
+
+    # 6. Invite + Change role panels
+    ox, oy = grid_pos(5, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Invite user · Change role", "Settings", g)
+    els += pe
+    left_w = cw * 0.48 - 8
+    els.append(rect(cx, cy, left_w, 520, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 20, cy + 20, "Send invitation", size=18, color=INK))
+    f, y = field(cx + 20, cy + 60, left_w - 40, "Phone or Email *", "", [g])
+    els += f
+    f, y = field(cx + 20, y, left_w - 40, "Role *", "Cashier ▾", [g])
+    els += f
+    f, y = field(cx + 20, y, left_w - 40, "Branch *", "Main ▾", [g])
+    els += f
+    els.append(text(cx + 20, y + 8, "Expires in 7 days · link + OTP", size=12, color=MUTED))
+    els += btn(cx + 20, y + 40, left_w - 40, 44, "Send invitation", True, [g])
+    rx = cx + cw * 0.52
+    els.append(rect(rx, cy, left_w, 520, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(rx + 20, cy + 20, "Change role", size=18, color=INK))
+    els.append(text(rx + 20, cy + 60, "User: Laila Nazari\nCurrent role: Cashier", size=14, color=MUTED, width=left_w - 40))
+    f, y = field(rx + 20, cy + 120, left_w - 40, "New role *", "Manager ▾", [g])
+    els += f
+    els.append(text(rx + 20, y + 8, "Permissions update immediately on save", size=12, color=MUTED, width=left_w - 40))
+    els += btn(rx + 20, y + 40, left_w - 40, 44, "Update role", True, [g])
+
+    # 7. Roles list
+    ox, oy = grid_pos(6, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Roles — list / search / filter", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Roles & permissions", [("+ Create role", True)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.4, "Search role name", [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "System", "Custom", "Active"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Role", "Type", "Users", "Permissions", "Status", "Actions"], [g])
+    for i, r in enumerate([
+        "Owner     System   1   All modules     Active   View (locked)",
+        "Manager   Custom   1   24 permissions  Active   Edit | Delete",
+        "Cashier   Custom   2   12 permissions  Active   Edit | Delete",
+        "Staff     Custom   3    8 permissions  Active   Edit | Delete",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
+    els += note(cx, y + 250, cw, "System roles (Owner) cannot be deleted. Custom roles support full CRUD.", [g])
+
+    # 8. Role edit + permission matrix
+    ox, oy = grid_pos(7, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. Role edit · permission matrix", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Edit role: Cashier", [("Cancel", False), ("Save role", True)], [g])
+    els += he
+    f, y = field(cx, y, 360, "Role name *", "Cashier", [g])
+    els += f
+    f, _ = field(cx + 380, cy + 52, 360, "Description", "POS & rental desk", [g])
+    els += f
+    els.append(text(cx, y + 8, "Permissions by module", size=14, color=MUTED))
+    y += 36
+    els += table_header(cx, y, cw, ["Module", "View", "Create", "Edit", "Void / Delete"], [g])
+    matrix = [
+        "Inventory      [✓]   [ ]   [ ]   [ ]",
+        "Sales          [✓]   [✓]   [✓]   [ ]",
+        "Procurement    [ ]   [ ]   [ ]   [ ]",
+        "Finance        [✓]   [ ]   [ ]   [ ]",
+        "Settings       [ ]   [ ]   [ ]   [ ]",
+        "Users / Roles  [ ]   [ ]   [ ]   [ ]",
+    ]
+    for i, r in enumerate(matrix):
+        els += table_row(cx, y + 40 + i * 44, cw, r, [g], 42)
+
+    # flow arrows row1
+    for i in range(3):
+        x1 = i * (DESK_W + GAP_X) + DESK_W + 8
+        x2 = (i + 1) * (DESK_W + GAP_X) - 8
+        els += arrow(x1, TITLE_H + DESK_H / 2, x2, TITLE_H + DESK_H / 2)
+    # flow arrows row2
+    row2_y = DESK_H + ROW_GAP + TITLE_H + DESK_H / 2
+    for i in range(3):
+        x1 = i * (DESK_W + GAP_X) + DESK_W + 8
+        x2 = (i + 1) * (DESK_W + GAP_X) - 8
+        els += arrow(x1, row2_y, x2, row2_y)
     return doc(els)
 
 
 def d_platform():
-    els = [text(0, -80, "BOMS Desktop — Platform / Settings", size=28, color=INK)]
-    g = nid()
-    pe, cx, cy, cw, ch = desk_shell(0, 0, "1. Home dashboard", "Home", g)
-    els += pe
-    # KPI row
-    kw = (cw - 36) / 4
-    for i, (t, v, c) in enumerate([("Today profit", "+4,200", OK), ("Cash & Banks", "18,200", ACCENT), ("Receivables", "3,100", WARN), ("Payables", "1,200", DANGER)]):
-        xx = cx + i * (kw + 12)
-        els.append(rect(xx, cy, kw, 90, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-        els.append(text(xx + 16, cy + 16, t, size=13, color=MUTED))
-        els.append(text(xx + 16, cy + 44, v, size=24, color=c))
-    els.append(text(cx, cy + 110, "Quick actions", size=14, color=MUTED))
-    for i, lab in enumerate(["+ Sale", "+ Rental", "+ Expense", "Open inventory"]):
-        els += btn(cx + i * 160, cy + 135, 148, 40, lab, i == 0, [g])
-    # two panels
-    els.append(rect(cx, cy + 200, cw * 0.55 - 8, 280, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 16, cy + 216, "Due returns today", size=15, color=INK))
-    els += table_row(cx + 16, cy + 250, cw * 0.55 - 40, "SO-019  Sara   Gold Gown   due today", [g])
-    els += table_row(cx + 16, cy + 298, cw * 0.55 - 40, "SO-021  Fatima Veil set    due Fri", [g])
-    els.append(rect(cx + cw * 0.55 + 8, cy + 200, cw * 0.45 - 8, 280, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + cw * 0.55 + 24, cy + 216, "Today activity", size=15, color=INK))
-    els.append(text(cx + cw * 0.55 + 24, cy + 250, "3 sales · 2 rentals\n2 low stock alerts\n1 PO to receive", size=14, color=MUTED, width=280))
+    """Tenant + branches/warehouses + master data CRUD."""
+    els = [text(0, -100, "BOMS Desktop — Platform / Settings", size=28, color=INK)]
+    els.append(
+        text(
+            0,
+            -60,
+            "Super Admin: Tenants CRUD. Tenant admins: Tenant profile, Branches (1→N Warehouses), Currencies, Units, Payment methods/terms, Preferences, Languages, Audit log.",
+            size=14,
+            color=MUTED,
+            width=2600,
+        )
+    )
 
-    x = DESK_W + GAP_X
+    # 1. Settings hub
+    ox, oy = grid_pos(0, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "2. Settings hub", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "1. Settings hub", "Settings", g)
     els += pe
-    cards = ["Shop profile", "Branches & warehouses", "Users & roles", "Currencies", "Units", "Payment methods", "Payment terms", "Preferences", "Languages", "Audit log"]
+    cards = [
+        "Tenants (Super Admin)",
+        "Tenant profile",
+        "Branches & warehouses",
+        "Currencies",
+        "Units",
+        "Payment methods",
+        "Payment terms",
+        "Preferences",
+        "Languages",
+        "Audit log",
+        "Users → Auth",
+        "Roles → Auth",
+    ]
     for i, cname in enumerate(cards):
         xx = cx + (i % 3) * ((cw - 24) / 3 + 12)
-        yy = cy + (i // 3) * 100
-        els.append(rect(xx, yy, (cw - 24) / 3, 84, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-        els.append(text(xx + 16, yy + 30, cname + "  ›", size=15, color=INK))
+        yy = cy + (i // 3) * 90
+        els.append(rect(xx, yy, (cw - 24) / 3, 76, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+        els.append(text(xx + 14, yy + 28, cname + "  ›", size=14, color=INK, width=(cw - 24) / 3 - 28))
 
-    x = 2 * (DESK_W + GAP_X)
+    # 2. Tenants list
+    ox, oy = grid_pos(1, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "3. Shop profile", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "2. Tenants — Super Admin CRUD", "Settings", g)
     els += pe
-    els.append(text(cx, cy, "Shop profile", size=22, color=INK))
-    els.append(rect(cx, cy + 40, 120, 120, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 35, cy + 90, "Logo", size=13, color=MUTED))
-    f, y = field(cx + 150, cy + 40, 400, "Shop name", "Al Dubai Bridal", [g])
-    els += f
-    f, y = field(cx + 150, y, 400, "Code / Phone / Website", "ADF · 0700…", [g])
-    els += f
-    f, y = field(cx + 150, y, 400, "Default currency / Language", "AFN · English", [g])
-    els += f
-    els += btn(cx + 150, y + 20, 160, 44, "Save changes", True, [g])
+    he, y = page_header(cx, cy, cw, "Tenants", [("+ Create tenant", True)], [g])
+    els += he
+    els += note(cx, y - 4, cw, "Visible only with Super Admin permission", [g])
+    y += 44
+    els += search_bar(cx, y, cw * 0.38, "Search name / code", [g])
+    els += filter_chips(cx + cw * 0.4, y + 4, ["All types", "Shop", "Mall", "Other", "Active", "Inactive"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Code", "Name", "Type", "Contact", "Branches", "Status", "Actions"], [g])
+    for i, r in enumerate([
+        "ADF   Al Dubai Bridal    Shop   0700…   2   Active    Edit | Profile | Delete",
+        "KBM   Kabul City Mall    Mall   0780…   5   Active    Edit | Profile | Delete",
+        "GWN   Green Wedding Co   Shop   g@…     1   Inactive  Edit | Profile | Delete",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
 
-    x = 3 * (DESK_W + GAP_X)
+    # 3. Create / Edit tenant
+    ox, oy = grid_pos(2, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "4. Branches & users", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Create / Edit tenant", "Settings", g)
     els += pe
-    els.append(text(cx, cy, "Branches                              [ + Add ]", size=18, color=INK, width=cw * 0.48))
-    els += table_header(cx, cy + 40, cw * 0.48 - 8, ["Code", "Name", "Warehouses", "Status"], [g])
-    els += table_row(cx, cy + 80, cw * 0.48 - 8, "MAIN   Main Branch   2 WH   Active", [g])
-    els += table_row(cx, cy + 124, cw * 0.48 - 8, "FL2    Second Floor  1 WH   Active", [g])
+    he, y = page_header(cx, cy, cw, "Create tenant", [("Cancel", False), ("Save tenant", True)], [g])
+    els += he
+    f, y = field(cx, y, 420, "Tenant name *", "Al Dubai Bridal", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 52, 420, "Code * (SKU prefix)", "ADF", [g])
+    els += f
+    f, y = field(cx, y, 420, "Tenant type * (enum)", "Shop ▾   [ + Manage types ]", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 114, 420, "Business mode", "Both ▾  Sale | Rental | Both", [g])
+    els += f
+    els.append(text(cx, y + 4, "Contact", size=14, color=MUTED))
+    f, y = field(cx, y + 28, 420, "Phone *", "0700…", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 210, 420, "Email / Website", "info@… / aldubai.af", [g])
+    els += f
+    els.append(text(cx, y + 4, "Address", size=14, color=MUTED))
+    f, y = field(cx, y + 28, 420, "Country / City", "Afghanistan / Kabul", [g])
+    els += f
+    f, _ = field(cx + 450, cy + 300, 420, "Street / Building", "Shar-e-Naw · Block 4", [g])
+    els += f
+    f, y = field(cx, y, 420, "Default currency / Language / TZ", "AFN · EN · Asia/Kabul", [g])
+    els += f
+    els.append(text(cx, y + 8, "Type enum examples: Shop · Mall · Boutique · Other (extensible)", size=12, color=MUTED, width=cw))
+
+    # 4. Tenant profile
+    ox, oy = grid_pos(3, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Tenant profile (not shop profile)", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Tenant profile", [("Save changes", True)], [g])
+    els += he
+    els.append(rect(cx, y, 120, 120, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 32, y + 50, "Logo", size=13, color=MUTED))
+    f, yy = field(cx + 150, y, 400, "Tenant name", "Al Dubai Bridal", [g])
+    els += f
+    f, yy = field(cx + 150, yy, 400, "Code / Type", "ADF · Shop", [g])
+    els += f
+    f, yy = field(cx + 150, yy, 400, "Contact phone / email / website", "0700… · info@…", [g])
+    els += f
+    f, yy = field(cx, yy + 20, cw * 0.48 - 8, "Address line", "Shar-e-Naw, Block 4", [g])
+    els += f
+    f, _ = field(cx + cw * 0.52, yy + 20, cw * 0.48 - 8, "City / Country / Postal", "Kabul · AF · —", [g])
+    els += f
+    els += note(cx, yy + 100, cw, "Renamed from Shop profile → Tenant profile (works for Shop, Mall, …)", [g])
+
+    # 5. Branches list
+    ox, oy = grid_pos(4, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Branches — CRUD / search / filter", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Branches", [("+ Add branch", True)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.4, "Search code / name / city", [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Active", "Main only", "Inactive"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Code", "Name", "City", "Warehouses", "Main?", "Status", "Actions"], [g])
+    for i, r in enumerate([
+        "MAIN   Main Branch     Kabul   3 WH   Yes   Active   Open | Edit | Delete",
+        "FL2    Second Floor    Kabul   1 WH   No    Active   Open | Edit | Delete",
+        "HRT    Herat Outlet    Herat   2 WH   No    Active   Open | Edit | Delete",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
+    els += note(cx, y + 200, cw, "Open branch → manage its warehouses (1 branch : many warehouses)", [g])
+
+    # ── Row 2 ──
+    # 6. Branch detail + warehouses
+    ox, oy = grid_pos(5, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Branch detail · warehouses 1→N", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Branch: Main · MAIN", [("Edit branch", False), ("+ Add warehouse", True)], [g])
+    els += he
+    els.append(text(cx, y, "Address: Shar-e-Naw · Manager: Ahmad · Status: Active", size=13, color=MUTED, width=cw))
+    y += 36
+    els.append(text(cx, y, "Warehouses under this branch", size=15, color=INK))
+    y += 28
+    els += search_bar(cx, y, cw * 0.4, "Search warehouse", [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Default", "Active"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Code", "Name", "Location", "Default?", "Status", "Actions"], [g])
+    for i, r in enumerate([
+        "WH-A   Showroom      Floor 1     Yes   Active   Edit | Delete",
+        "WH-B   Back storage  Basement    No    Active   Edit | Delete",
+        "WH-C   Repair desk   Tailor area No    Active   Edit | Delete",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
+
+    # 7. Currencies + Units
+    ox, oy = grid_pos(6, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Currencies · Units", "Settings", g)
+    els += pe
+    left = cw * 0.48 - 8
+    els.append(text(cx, cy, "Currencies                         [ + Add ]", size=16, color=INK, width=left))
+    els += search_bar(cx, cy + 36, left, "Code / name", [g])
+    els += table_header(cx, cy + 84, left, ["Code", "Name", "Rate", "Default", "Actions"], [g])
+    els += table_row(cx, cy + 124, left, "AFN  Afghani   1      Yes   Edit|Del", [g])
+    els += table_row(cx, cy + 168, left, "USD  US Dollar 70.5   No    Edit|Del", [g])
     rx = cx + cw * 0.52
-    els.append(text(rx, cy, "Users                                 [ + Invite ]", size=18, color=INK, width=cw * 0.48))
-    els += table_header(rx, cy + 40, cw * 0.48 - 8, ["Name", "Role", "Branch", "Status"], [g])
-    els += table_row(rx, cy + 80, cw * 0.48 - 8, "Ahmad   Owner    Main   Active", [g])
-    els += table_row(rx, cy + 124, cw * 0.48 - 8, "Laila   Cashier  Main   Active", [g])
-    els += table_row(rx, cy + 168, cw * 0.48 - 8, "Omar    Staff    Main   Invited", [g])
+    els.append(text(rx, cy, "Units                              [ + Add ]", size=16, color=INK, width=left))
+    els += search_bar(rx, cy + 36, left, "Name / code", [g])
+    els += table_header(rx, cy + 84, left, ["Code", "Name", "Status", "Actions"], [g])
+    els += table_row(rx, cy + 124, left, "pcs  Piece   Active  Edit|Del", [g])
+    els += table_row(rx, cy + 168, left, "set  Set     Active  Edit|Del", [g])
+    els += table_row(rx, cy + 212, left, "box  Box     Active  Edit|Del", [g])
+    els += note(cx, cy + 280, cw, "Each master list: Create · Read · Update · Delete + search/filter", [g])
 
-    els += flow_arrows(4, DESK_W, TITLE_H + DESK_H / 2)
+    # 8. Payment methods + terms
+    ox, oy = grid_pos(7, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. Payment methods · terms", "Settings", g)
+    els += pe
+    left = cw * 0.48 - 8
+    els.append(text(cx, cy, "Payment methods                    [ + Add ]", size=16, color=INK, width=left))
+    els += search_bar(cx, cy + 36, left, "Name", [g])
+    els += filter_chips(cx, cy + 80, ["All", "Active"], [g])
+    els += table_header(cx, cy + 120, left, ["Name", "Status", "Actions"], [g])
+    for i, r in enumerate(["Cash     Active  Edit|Del", "Card     Active  Edit|Del", "Transfer Active  Edit|Del"]):
+        els += table_row(cx, cy + 160 + i * 44, left, r, [g], 42)
+    rx = cx + cw * 0.52
+    els.append(text(rx, cy, "Payment terms                      [ + Add ]", size=16, color=INK, width=left))
+    els += search_bar(rx, cy + 36, left, "Name", [g])
+    els += table_header(rx, cy + 120, left, ["Name", "Rule", "Actions"], [g])
+    for i, r in enumerate(["Immediate   due 0d     Edit|Del", "Deposit 50% 50% up front Edit|Del", "Net 7       due +7d    Edit|Del"]):
+        els += table_row(rx, cy + 160 + i * 44, left, r, [g], 42)
+
+    # 9. Preferences + Languages
+    ox, oy = grid_pos(8, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "9. Preferences · Languages", "Settings", g)
+    els += pe
+    left = cw * 0.48 - 8
+    els.append(rect(cx, cy, left, 520, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 20, cy + 20, "Preferences", size=18, color=INK))
+    f, y = field(cx + 20, cy + 60, left - 40, "Default rental days", "3", [g])
+    els += f
+    f, y = field(cx + 20, y, left - 40, "Low-stock alert qty", "1", [g])
+    els += f
+    f, y = field(cx + 20, y, left - 40, "Nav style / RTL", "Sidebar ▾ · Auto RTL", [g])
+    els += f
+    f, y = field(cx + 20, y, left - 40, "Timezone", "Asia/Kabul ▾", [g])
+    els += f
+    els += btn(cx + 20, y + 20, 160, 40, "Save preferences", True, [g])
+    rx = cx + cw * 0.52
+    els.append(rect(rx, cy, left, 520, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(rx + 20, cy + 20, "Languages                    [ + Add ]", size=16, color=INK, width=left - 40))
+    els += search_bar(rx + 20, cy + 60, left - 40, "Language / code", [g])
+    els += table_header(rx + 20, cy + 110, left - 40, ["Code", "Name", "Default", "Actions"], [g])
+    for i, r in enumerate(["en  English  Yes  Edit", "fa  Dari     No   Edit", "ps  Pashto   No   Edit", "ar  Arabic   No   Edit"]):
+        els += table_row(rx + 20, cy + 150 + i * 44, left - 40, r, [g], 42)
+
+    # 10. Audit log
+    ox, oy = grid_pos(9, 5, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "10. Audit log", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Audit log", [("Export", False)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.36, "User / action / entity", [g])
+    els += filter_chips(cx + cw * 0.38, y + 4, ["All", "Login", "Tenant", "Users", "Settings", "Date ▾"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Time", "User", "Action", "Entity", "Detail", "IP"], [g])
+    for i, r in enumerate([
+        "11 Sep 09:12  Ahmad   LOGIN          session   success           1.2.3.4",
+        "11 Sep 09:40  Ahmad   TENANT_UPDATE   tenant    type Shop→Mall     1.2.3.4",
+        "11 Sep 10:05  Ahmad   USER_INVITE     user      Laila / Cashier    1.2.3.4",
+        "11 Sep 10:22  Ahmad   ROLE_UPDATE      role      Cashier perms      1.2.3.4",
+        "11 Sep 11:01  Sara    BRANCH_CREATE   branch    Herat Outlet       5.6.7.8",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
+
+    # arrows
+    for row in range(2):
+        base_y = row * (DESK_H + ROW_GAP) + TITLE_H + DESK_H / 2
+        for i in range(4):
+            x1 = i * (DESK_W + GAP_X) + DESK_W + 8
+            x2 = (i + 1) * (DESK_W + GAP_X) - 8
+            els += arrow(x1, base_y, x2, base_y)
     return doc(els)
 
 

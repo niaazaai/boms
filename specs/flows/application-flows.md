@@ -8,13 +8,18 @@ Step-by-step charts for bridal shop daily work.
 
 ```mermaid
 flowchart TB
-  AUTH[Auth: Login / Register] --> HOME[Home Dashboard]
+  LOGIN[Public: Login only] -->|authenticated| HOME[Home Dashboard]
+  LOGIN --> FORGOT[Forgot password]
+  INVITE[Accept invite link] --> LOGIN
   HOME --> INV[Inventory]
   HOME --> SAL[Sales]
   HOME --> MORE[More]
   MORE --> FIN[Finance]
   MORE --> PRC[Procurement]
   MORE --> SET[Settings / Platform]
+  SET --> TEN[Tenants Super Admin]
+  SET --> USERS[Users / Roles RBAC]
+  SET --> BR[Branches → Warehouses]
 ```
 
 ---
