@@ -21,8 +21,11 @@ Implement **one feature file at a time** in this order:
 **BOMS** — Bridal Omnichannel Management System for shops that **rent** and **sell** bridal clothing.
 
 - Mobile-first, owner-friendly
-- Simple inventory with auditable stock ledger
-- Easy sale + rental + return
+- Tenant-bound users with multi-role RBAC (no invite flow)
+- UI locale: English (LTR) / Dari (RTL) / Pashto (RTL) from tenant settings
+- Create/edit forms in drawers (side follows LTR/RTL)
+- Inventory with auditable ledger, valuation (stock worth), reserve, dispose
+- Easy sale + rental + return (restock)
 - Lightweight procurement for correct stock cost & A/P
 - Finance with 5 pillars so owner sees profit/loss daily
 

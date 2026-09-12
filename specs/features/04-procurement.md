@@ -3,7 +3,7 @@
 **Status:** ready after Inventory (can parallelize with Sales)  
 **Depends on:** Platform + Inventory  
 **Schema:** `specs/database/procurement`  
-**Wireframes:** `specs/wireframes/05-procurement.md`  
+**Wireframes:** `specs/wireframes/*/05-Procurement.excalidraw` (+ inventory receive screen in `03-Inventory.excalidraw`)  
 **Flows:** `specs/flows/application-flows.md` § procurement
 
 ---

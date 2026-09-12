@@ -3,8 +3,8 @@
 **Status:** ready after Inventory  
 **Depends on:** Platform + Inventory  
 **Schema:** `specs/database/sales`  
-**Wireframes:** `specs/wireframes/04-sales.md`  
-**Flows:** `specs/flows/application-flows.md` § sale & rental
+**Wireframes:** `specs/wireframes/*/04-Sales.excalidraw` (+ inventory stock-out / return restock in `03-Inventory.excalidraw`)  
+**Flows:** `specs/flows/application-flows.md` § sale & rental & sales return
 
 ---
 

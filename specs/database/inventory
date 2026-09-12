@@ -1,13 +1,18 @@
 ----------------------------------------------------------------------------------
 INVENTORY MODULE
-(bridal dresses, rental outfits, accessories — simple stock + status tracking)
+(bridal dresses, rental outfits, accessories — stock ledger, valuation, movements)
 ----------------------------------------------------------------------------------
 
     -- Notes for bridal shops:
     -- • One physical dress is usually one inventory_item (SKU) with qty 1.
     -- • Accessories / veils / shoes may use quantity > 1.
     -- • Never mutate stock qty directly — always use inventory_stock_transactions.
-    -- • Current qty = SUM(quantity) of stock transactions for item + warehouse.
+    -- • Current on-hand qty = SUM(quantity) of stock transactions for item + warehouse.
+    -- • Reserved qty = SUM(active reservations) OR net of reserve/release transactions.
+    -- • Available qty = on_hand − reserved (never sell/rent below available).
+    -- • Stock worth (valuation) = SUM(on_hand_qty × unit_cost) in tenant default currency.
+    -- Stock-in paths: procurement receive · manual stock entry · sales return restock · rent return
+    -- Stock-out paths: sales order complete · dispose · rent out · transfer out
 
 
     inventory_main_categories
@@ -97,7 +102,7 @@ INVENTORY MODULE
         rental_deposit_amount       numeric(18,2) default 0
         rental_late_fee_per_day     numeric(18,2) default 0
 
-        -- Purchase / cost basis (opening or last purchase)
+        -- Purchase / cost basis (opening or last purchase) — used for stock worth
         purchase_opening_date       date
         purchase_date               date
         purchase_unit_id            FK units(id)
@@ -142,32 +147,66 @@ INVENTORY MODULE
         branch_id                   FK branches(id)
 
         type                        enum(
-                                        'stock_in',         -- purchase / opening
-                                        'stock_out',        -- sale / dispose
+                                        'stock_in',         -- procurement / manual / return restock
+                                        'stock_out',        -- sale complete
                                         'adjustment',       -- count correction (+/-)
                                         'transfer_in',
                                         'transfer_out',
                                         'reserve',          -- hold for booking
                                         'release',          -- un-hold
                                         'rent_out',         -- dress left shop
-                                        'rent_return'       -- dress returned
+                                        'rent_return',      -- dress returned
+                                        'dispose'           -- write-off / scrap (always negative)
                                     )
 
         quantity                    numeric(18,2) not null
             -- positive: stock_in, transfer_in, release, rent_return, adjustment+
-            -- negative: stock_out, transfer_out, reserve, rent_out, adjustment-
+            -- negative: stock_out, transfer_out, reserve, rent_out, dispose, adjustment-
 
         unit_cost                   numeric(18,2) default 0
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
+        -- amount_base = quantity * unit_cost * exchange_rate (signed; for valuation reports)
 
-        reference_type              varchar(50)             -- sales_order, purchase_order, adjustment, transfer
+        reference_type              varchar(50)
+            -- purchase_order | procurement_receipt | manual_entry | adjustment
+            -- transfer | reservation | sales_order | sales_return | disposal
         reference_id                int nullable
         note                        text
 
         created_by                  FK users(id)
         created_at
         updated_at
+        -- Immutable after create. Reverse with opposite transaction if void needed.
+
+
+    -- Manual stock entry (opening stock / ad-hoc stock-in without PO)
+    inventory_stock_entries
+        id (PK)
+        tenant_id                   FK tenants(id)
+        entry_number                varchar(100) unique     -- MSE26-0001
+        entry_type                  enum('opening','manual_in','manual_correction') default 'manual_in'
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        entry_date                  date not null
+        note                        text
+        status                      enum('draft','posted','cancelled') default 'draft'
+        posted_at                   timestamptz
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- On post: inventory_stock_transactions type=stock_in, reference_type=manual_entry
+
+
+    inventory_stock_entry_items
+        id (PK)
+        stock_entry_id              FK inventory_stock_entries(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,2) not null
+        unit_cost                   numeric(18,2) default 0
+        currency_id                 FK currencies(id)
+        note                        text
 
 
     inventory_adjustments
@@ -197,6 +236,34 @@ INVENTORY MODULE
         note                        text
 
 
+    -- Dispose / write-off (damaged beyond repair, scrap, lost permanently)
+    inventory_disposals
+        id (PK)
+        tenant_id                   FK tenants(id)
+        disposal_number             varchar(100) unique     -- DSP26-0001
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        reason                      enum('damaged','expired','lost','scrap','other') default 'damaged'
+        note                        text
+        attachment_path             varchar(255)
+        status                      enum('draft','posted','cancelled') default 'draft'
+        posted_at                   timestamptz
+        created_by                  FK users(id)
+        updated_by                  FK users(id)
+        created_at
+        updated_at
+        -- On post: stock_transactions type=dispose (negative qty) + item status → disposed when qty 0
+
+
+    inventory_disposal_items
+        id (PK)
+        disposal_id                 FK inventory_disposals(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,2) not null
+        unit_cost                   numeric(18,2) default 0
+        note                        text
+
+
     inventory_transfers
         id (PK)
         tenant_id                   FK tenants(id)
@@ -223,7 +290,7 @@ INVENTORY MODULE
         note                        text
 
 
-    -- Optional: dedicated reservation rows for calendar / booking UI
+    -- Reservation rows for calendar / booking UI (also writes reserve/release transactions)
     inventory_reservations
         id (PK)
         tenant_id                   FK tenants(id)
@@ -239,3 +306,14 @@ INVENTORY MODULE
         updated_by                  FK users(id)
         created_at
         updated_at
+
+
+    -- Computed / reporting views (not physical tables — document for implementers)
+    -- inventory_stock_balances (view):
+    --   tenant_id, inventory_item_id, warehouse_id, branch_id,
+    --   on_hand_qty, reserved_qty, available_qty,
+    --   avg_unit_cost, stock_value_base
+    -- inventory_valuation_report (report):
+    --   filters: branch, warehouse, category, date-as-of
+    --   columns: SKU, name, on_hand, reserved, available, unit_cost, stock_worth
+    --   totals: total inventory worth in tenant default currency

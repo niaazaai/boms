@@ -185,6 +185,30 @@ def note(x, y, w, content: str, g=None):
     ]
 
 
+def drawer(ox, oy, content_w, content_h, title: str, side: str = "right", width: float = 420, g=None):
+    """Create/edit side drawer. side=right for LTR, left for RTL."""
+    g = g or []
+    dw = width
+    dx = ox + content_w - dw if side == "right" else ox
+    els = [
+        rect(ox, oy, content_w, content_h, strokeColor="transparent", backgroundColor="rgba(15,23,42,0.25)", strokeWidth=0, groupIds=g),
+        rect(dx, oy, dw, content_h, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=g),
+        text(dx + 20, oy + 16, title, size=18, color=INK, width=dw - 40),
+        text(dx + 20, oy + 42, f"Drawer · opens from {side} ({'LTR' if side == 'right' else 'RTL'})", size=11, color=MUTED, width=dw - 40),
+    ]
+    # form content origin inside drawer
+    return els, dx + 20, oy + 70, dw - 40
+
+
+def kpi_card(x, y, w, h, label, value, color=INK, g=None):
+    g = g or []
+    return [
+        rect(x, y, w, h, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=g),
+        text(x + 14, y + 12, label, size=11, color=MUTED, width=w - 28),
+        text(x + 14, y + 34, value, size=18, color=color, width=w - 28),
+    ]
+
+
 ROW_GAP = 160
 
 
@@ -268,7 +292,7 @@ def desk_shell(ox, oy, title: str, active_nav: str, group: str, show_sidebar: bo
     # top app bar in content
     if show_sidebar:
         els.append(rect(ox + SIDEBAR_W + 1, top, DESK_W - SIDEBAR_W - 2, TOPBAR_H, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=g))
-        els.append(text(ox + SIDEBAR_W + 24, top + 18, f"{active_nav}                          Branch: Main ▾     🔔  Ahmad ▾", size=14, color=INK, width=DESK_W - SIDEBAR_W - 60))
+        els.append(text(ox + SIDEBAR_W + 24, top + 18, f"{active_nav}                    Lang: EN ▾ (LTR)     Branch: Main ▾     🔔  Ahmad ▾", size=14, color=INK, width=DESK_W - SIDEBAR_W - 60))
         cy = top + TOPBAR_H + 20
         ch = DESK_H - TOPBAR_H - 70
     return els, cx, cy, cw, ch
@@ -280,7 +304,8 @@ def desk_shell(ox, oy, title: str, active_nav: str, group: str, show_sidebar: bo
 
 def m_auth():
     els = [text(0, -80, "BOMS Mobile — Auth & Authorization", size=28, color=INK)]
-    # 1. Login only (public)
+    els.append(text(0, -48, "No invite · Users tenant-bound · Multi-role · Locale from tenant settings", size=12, color=MUTED, width=2200))
+
     g = nid()
     pe, cx, cy, cw = phone_shell(0, 0, "1. Login (public only)", g)
     els += pe
@@ -292,9 +317,8 @@ def m_auth():
     els += f
     els.append(text(cx, y + 6, "Forgot password?", size=13, color=ACCENT))
     els += btn(cx, y + 40, cw, 48, "Sign in", True, [g])
-    els.append(text(cx, y + 110, "No public register — tenants\nare created by Super Admin", size=11, color=MUTED, width=cw, align="center"))
+    els.append(text(cx, y + 110, "UI language after login comes from\ntenant setting (EN / Dari / Pashto)", size=11, color=MUTED, width=cw, align="center"))
 
-    # 2. Forgot password
     x = PHONE_W + GAP_X
     g = nid()
     pe, cx, cy, cw = phone_shell(x, 0, "2. Forgot password", g)
@@ -304,73 +328,83 @@ def m_auth():
     els += f
     els += btn(cx, y + 16, cw, 48, "Send reset code", True, [g])
 
-    # 3. Accept invite
     x = 2 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "3. Accept invite", g)
-    els += pe
-    els.append(text(cx, cy + 24, "Join Al Dubai Bridal", size=18, color=INK, width=cw, align="center"))
-    els.append(text(cx, cy + 56, "Role: Cashier", size=13, color=MUTED, width=cw, align="center"))
-    f, y = field(cx, cy + 100, cw, "Your name", "", [g])
-    els += f
-    f, y = field(cx, y, cw, "Set password", "", [g])
-    els += f
-    els += btn(cx, y + 20, cw, 48, "Join tenant", True, [g])
-
-    # 4. Users list
-    x = 3 * (PHONE_W + GAP_X)
-    g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "4. Users list", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "3. Users list", g)
     els += pe
     els.append(text(cx, cy + 4, "Users                         +", size=16, color=INK, width=cw))
     els += search_bar(cx, cy + 36, cw, "Name / phone / email", [g])
-    els += filter_chips(cx, cy + 80, ["All", "Active", "Invited", "Role▾"], [g])
-    for i, (name, role) in enumerate([("Ahmad · Owner", "Active"), ("Laila · Cashier", "Active"), ("Omar · Staff", "Invited")]):
+    els += filter_chips(cx, cy + 80, ["All", "Active", "Inactive", "Role▾"], [g])
+    for i, (name, role) in enumerate([
+        ("Ahmad · Owner+Mgr", "Active"),
+        ("Laila · Cashier+Staff", "Active"),
+        ("Omar · Staff", "Inactive"),
+    ]):
         yy = cy + 120 + i * 72
         els.append(rect(cx, yy, cw, 64, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
         els.append(text(cx + 10, yy + 8, name, size=13, color=INK))
-        els += chip(cx + 10, yy + 32, role, OK if role == "Active" else WARN, [g])
+        els += chip(cx + 10, yy + 32, role, OK if role == "Active" else MUTED, [g])
         els.append(text(cx + cw - 90, yy + 22, "⋮ Edit", size=12, color=MUTED))
 
-    # 5. User create / actions
+    x = 3 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "4. Create user drawer", g)
+    els += pe
+    de, fx, fy, fw = drawer(cx - 8, cy - 8, cw + 16, PHONE_H - 80, "Create user", "right", cw + 16, [g])
+    els += de
+    f, y = field(fx, fy, fw, "Tenant *", "Al Dubai Bridal ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "Name *", "Laila Nazari", [g])
+    els += f
+    f, y = field(fx, y, fw, "Phone / Email *", "0780…", [g])
+    els += f
+    f, y = field(fx, y, fw, "Roles * (multi)", "", [g])
+    els += f
+    els += chip(fx, y + 4, "Cashier ✓", ACCENT, [g])
+    els += chip(fx + 100, y + 4, "Staff ✓", ACCENT, [g])
+    els += chip(fx + 190, y + 4, "+ Role", MUTED, [g])
+    f, y = field(fx, y + 44, fw, "Branch / Status", "Main · Active", [g])
+    els += f
+    els += btn(fx, y + 8, fw, 40, "Save user", True, [g])
+
     x = 4 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "5. User form / actions", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "5. Manage roles", g)
     els += pe
-    els.append(text(cx, cy + 4, "← Create user", size=16, color=INK))
-    f, y = field(cx, cy + 40, cw, "Name *", "Laila", [g])
-    els += f
-    f, y = field(cx, y, cw, "Phone / Email *", "", [g])
-    els += f
-    f, y = field(cx, y, cw, "Role *", "Cashier ▾", [g])
-    els += f
-    f, y = field(cx, y, cw, "Default branch", "Main ▾", [g])
-    els += f
-    els += btn(cx, y + 8, cw, 40, "Save user", True, [g])
-    els += btn(cx, y + 56, cw, 36, "Send invitation", False, [g])
-    els += btn(cx, y + 100, cw, 36, "Change role", False, [g])
-    els += btn(cx, y + 144, cw, 36, "Delete / Deactivate", False, [g])
+    els.append(text(cx, cy + 4, "← Laila · Roles", size=16, color=INK))
+    els.append(text(cx, cy + 40, "Multi-select roles for this user", size=12, color=MUTED, width=cw))
+    for i, (role, on) in enumerate([("Owner", False), ("Manager", False), ("Cashier", True), ("Staff", True)]):
+        yy = cy + 70 + i * 56
+        els.append(rect(cx, yy, cw, 48, strokeColor=LINE, backgroundColor=SOFT2 if on else BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 12, yy + 14, f"{'[✓]' if on else '[ ]'}  {role}", size=14, color=INK))
+    els += btn(cx, cy + 310, cw, 44, "Save roles", True, [g])
 
-    # 6. Roles & permissions
     x = 5 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "6. Roles & permissions", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "6. Roles · permission matrix", g)
     els += pe
-    els.append(text(cx, cy + 4, "Roles                          +", size=16, color=INK, width=cw))
-    els += search_bar(cx, cy + 36, cw, "Role name", [g])
-    for i, (name, sub) in enumerate([("Owner · system", "All permissions"), ("Manager", "24 permissions"), ("Cashier", "12 permissions")]):
-        yy = cy + 84 + i * 70
-        els.append(rect(cx, yy, cw, 62, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 10, yy + 12, f"{name}\n{sub}", size=13, color=INK))
-    els.append(text(cx, cy + 310, "Edit role → permission matrix\nView · Create · Edit · Void / module", size=12, color=MUTED, width=cw))
+    els.append(text(cx, cy + 4, "← Edit Cashier", size=16, color=INK))
+    els.append(text(cx, cy + 36, "Module permissions", size=12, color=MUTED))
+    els.append(text(cx, cy + 60, "         V  C  E  X  Ex Ap", size=11, color=MUTED, width=cw))
+    for i, row in enumerate([
+        "Inventory  ✓  ·  ·  ·  ·  ·",
+        "Sales      ✓  ✓  ✓  ·  ·  ·",
+        "Procure    ·  ·  ·  ·  ·  ·",
+        "Finance    ✓  ·  ·  ·  ·  ·",
+        "Settings   ·  ·  ·  ·  ·  ·",
+    ]):
+        yy = cy + 84 + i * 44
+        els.append(rect(cx, yy, cw, 40, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 8, yy + 12, row, size=12, color=INK))
+    els += btn(cx, cy + 320, cw, 40, "Save role", True, [g])
 
     els += flow_arrows(6, PHONE_W, TITLE_H + PHONE_H / 2)
     return doc(els)
 
-
 def m_platform():
     els = [text(0, -80, "BOMS Mobile — Platform / Settings", size=28, color=INK)]
-    # 1. Settings hub
+    els.append(text(0, -48, "Drawers · City→Address · Currency/Language/TZ separate · EN/Dari/Pashto RTL", size=12, color=MUTED, width=2400))
+
     g = nid()
     pe, cx, cy, cw = phone_shell(0, 0, "1. Settings hub", g)
     els += pe
@@ -383,8 +417,7 @@ def m_platform():
         "Units ›",
         "Payment methods ›",
         "Payment terms ›",
-        "Preferences ›",
-        "Languages ›",
+        "Preferences & language ›",
         "Audit log ›",
     ]
     for i, it in enumerate(items):
@@ -393,7 +426,6 @@ def m_platform():
         els.append(text(cx + 10, yy + 8, it, size=12, color=INK))
     els += nav_bar(0, "More", [g])
 
-    # 2. Tenants list
     x = PHONE_W + GAP_X
     g = nid()
     pe, cx, cy, cw = phone_shell(x, 0, "2. Tenants (Super Admin)", g)
@@ -406,131 +438,192 @@ def m_platform():
         els.append(rect(cx, yy, cw, 62, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
         els.append(text(cx + 10, yy + 18, row, size=13, color=INK))
 
-    # 3. Tenant profile
     x = 2 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "3. Tenant profile", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "3. Tenant drawer (LTR→right)", g)
     els += pe
-    els.append(text(cx, cy + 4, "← Tenant profile", size=16, color=INK))
-    f, y = field(cx, cy + 40, cw, "Name *", "Al Dubai Bridal", [g])
+    de, fx, fy, fw = drawer(cx - 8, cy - 8, cw + 16, PHONE_H - 80, "Create tenant", "right", cw + 16, [g])
+    els += de
+    f, y = field(fx, fy, fw, "Name *", "Al Dubai Bridal", [g])
     els += f
-    f, y = field(cx, y, cw, "Code * / Type", "ADF · Shop ▾", [g])
+    f, y = field(fx, y, fw, "Code * / Type", "ADF · Shop ▾", [g])
     els += f
-    f, y = field(cx, y, cw, "Contact phone / email", "", [g])
+    f, y = field(fx, y, fw, "City *", "Kabul ▾", [g])
     els += f
-    f, y = field(cx, y, cw, "Address", "Kabul · Street…", [g])
+    f, y = field(fx, y, fw, "Address", "Shar-e-Naw · Block 4…", [g])
     els += f
-    els += btn(cx, y + 12, cw, 44, "Save", True, [g])
+    f, y = field(fx, y, fw, "Default currency *", "AFN ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "Default language *", "English ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "Timezone *", "Asia/Kabul ▾", [g])
+    els += f
+    els += btn(fx, y + 6, fw, 36, "Save tenant", True, [g])
 
-    # 4. Branches + warehouses
     x = 3 * (PHONE_W + GAP_X)
     g = nid()
     pe, cx, cy, cw = phone_shell(x, 0, "4. Branch → warehouses", g)
     els += pe
     els.append(text(cx, cy + 4, "← Main Branch              +", size=15, color=INK, width=cw))
-    els.append(text(cx, cy + 36, "Warehouses (1 branch → many)", size=12, color=MUTED, width=cw))
     for i, (name, sub) in enumerate([("WH-A Default", "Main floor"), ("WH-B Storage", "Back room"), ("WH-C Repair", "Tailor desk")]):
-        yy = cy + 64 + i * 72
+        yy = cy + 50 + i * 72
         els.append(rect(cx, yy, cw, 64, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
         els.append(text(cx + 10, yy + 14, f"{name}\n{sub}", size=13, color=INK))
 
-    # 5. Master data sample
     x = 4 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "5. Master data (CRUD)", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "5. Language → RTL/LTR", g)
     els += pe
-    els.append(text(cx, cy + 4, "Currencies                    +", size=15, color=INK, width=cw))
-    els += search_bar(cx, cy + 36, cw, "Code / name", [g])
-    els.append(rect(cx, cy + 84, cw, 52, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 10, cy + 100, "AFN · Default · Edit · Del", size=13, color=INK))
-    els.append(rect(cx, cy + 144, cw, 52, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 10, cy + 160, "USD · rate 70.5 · Edit · Del", size=13, color=INK))
-    els.append(text(cx, cy + 220, "Same list pattern for:\nUnits · Pay methods · Terms\nLanguages · Preferences", size=12, color=MUTED, width=cw))
+    els.append(text(cx, cy + 8, "System language", size=18, color=INK))
+    els.append(text(cx, cy + 40, "Applies to whole UI (no page switcher)", size=11, color=MUTED, width=cw))
+    for i, (lang, dir_) in enumerate([("English", "LTR"), ("Dari / دری", "RTL"), ("Pashto / پښتو", "RTL")]):
+        yy = cy + 70 + i * 64
+        sel = i == 1
+        els.append(rect(cx, yy, cw, 56, strokeColor=ACCENT if sel else LINE, backgroundColor=SOFT2 if sel else BG, strokeWidth=2 if sel else 1, groupIds=[g]))
+        els.append(text(cx + 12, yy + 10, f"{'[●]' if sel else '[ ]'}  {lang}", size=14, color=INK))
+        els.append(text(cx + 12, yy + 32, f"Direction: {dir_} · drawers from {'left' if dir_=='RTL' else 'right'}", size=11, color=MUTED))
+    els += note(cx, cy + 280, cw, "Dari selected → whole app RTL", [g])
 
-    # 6. Audit log
     x = 5 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "6. Audit log", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "6. RTL drawer (from left)", g)
     els += pe
-    els.append(text(cx, cy + 4, "← Audit log", size=16, color=INK))
-    els += search_bar(cx, cy + 36, cw, "User / action", [g])
-    els += filter_chips(cx, cy + 80, ["All", "Login", "Settings"], [g])
-    for i, row in enumerate(["Ahmad · login · 09:12", "Ahmad · tenant edit", "Laila · role change"]):
-        yy = cy + 120 + i * 56
-        els.append(rect(cx, yy, cw, 48, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 10, yy + 14, row, size=12, color=INK))
+    de, fx, fy, fw = drawer(cx - 8, cy - 8, cw + 16, PHONE_H - 80, "ویرایش مستاجر", "left", cw + 16, [g])
+    els += de
+    f, y = field(fx, fy, fw, "شهر / City", "کابل ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "آدرس / Address", "شهرنو…", [g])
+    els += f
+    f, y = field(fx, y, fw, "اسعار", "افغانی ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "زبان", "دری ▾", [g])
+    els += f
+    f, y = field(fx, y, fw, "منطقه زمانی", "Asia/Kabul", [g])
+    els += f
+    els += btn(fx, y + 8, fw, 40, "ذخیره", True, [g])
 
     els += flow_arrows(6, PHONE_W, TITLE_H + PHONE_H / 2)
     return doc(els)
 
-
 def m_inventory():
     els = [text(0, -80, "BOMS Mobile — Inventory", size=28, color=INK)]
+    els.append(text(0, -48, "Worth · Stock in/out · Adjust · Dispose · Reserve · PO/Manual entry", size=12, color=MUTED, width=2800))
+
     g = nid()
-    pe, cx, cy, cw = phone_shell(0, 0, "1. Inventory list", g)
+    pe, cx, cy, cw = phone_shell(0, 0, "1. Inventory hub", g)
     els += pe
-    els.append(text(cx, cy + 4, "Inventory                      +", size=16, color=INK, width=cw))
-    els.append(rect(cx, cy + 36, cw, 36, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 10, cy + 44, "🔍 Search name / SKU / size", size=12, color=LINE))
-    for i, (sku, name, st) in enumerate([("ADF26-0042", "White A-Line M", "Available"), ("ADF26-0038", "Gold Ball Gown L", "Rented"), ("ADF26-0031", "Veil set", "Available")]):
-        yy = cy + 90 + i * 100
-        els.append(rect(cx, yy, cw, 90, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-        els.append(rect(cx + 8, yy + 12, 66, 66, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
-        els.append(text(cx + 86, yy + 14, f"{sku}\n{name}", size=13, color=INK))
-        els += chip(cx + 86, yy + 56, st, OK if st == "Available" else WARN, [g])
+    els.append(text(cx, cy + 4, "Inventory", size=18, color=INK))
+    els += kpi_card(cx, cy + 36, (cw - 8) / 2, 64, "Stock worth", "2.4M AFN", ACCENT, [g])
+    els += kpi_card(cx + (cw - 8) / 2 + 8, cy + 36, (cw - 8) / 2, 64, "Available", "86", OK, [g])
+    els += kpi_card(cx, cy + 110, (cw - 8) / 2, 56, "Reserved", "12", WARN, [g])
+    els += kpi_card(cx + (cw - 8) / 2 + 8, cy + 110, (cw - 8) / 2, 56, "Low stock", "3", DANGER, [g])
+    for i, label in enumerate(["+ Manual entry", "Receive PO", "Adjust", "Dispose"]):
+        els += btn(cx, cy + 184 + i * 44, cw, 38, label, i < 2, [g])
     els += nav_bar(0, "Inventory", [g])
 
     x = PHONE_W + GAP_X
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "2. Item detail", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "2. Item list", g)
     els += pe
-    els.append(text(cx, cy + 4, "← ADF26-0042", size=14, color=INK))
-    els.append(rect(cx, cy + 30, cw, 140, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx, cy + 184, "White A-Line Dress", size=18, color=INK))
-    els += chip(cx, cy + 214, "Available", OK, [g])
-    els.append(text(cx, cy + 250, "Sale 12,000 · Rent 2,500 / 3d\nQty 1 · Main WH", size=13, color=MUTED, width=cw))
-    els += btn(cx, cy + 320, (cw - 8) / 2, 40, "Adjust", False, [g])
-    els += btn(cx + (cw - 8) / 2 + 8, cy + 320, (cw - 8) / 2, 40, "Edit", True, [g])
+    els.append(text(cx, cy + 4, "Items                          +", size=16, color=INK, width=cw))
+    els += search_bar(cx, cy + 36, cw, "SKU / name / size", [g])
+    for i, (sku, name, st, worth) in enumerate([
+        ("ADF26-0042", "White A-Line M", "Avail 1", "7.5k"),
+        ("ADF26-0038", "Gold Gown L", "Rsvd", "8.0k"),
+        ("ADF26-0031", "Veil set", "Avail 4", "2.0k"),
+    ]):
+        yy = cy + 84 + i * 88
+        els.append(rect(cx, yy, cw, 80, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(rect(cx + 8, yy + 10, 56, 56, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 74, yy + 12, f"{sku}\n{name}", size=12, color=INK))
+        els += chip(cx + 74, yy + 48, st, OK if "Avail" in st else WARN, [g])
+        els.append(text(cx + cw - 70, yy + 30, worth, size=12, color=MUTED))
 
     x = 2 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "3. Add item", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "3. Item detail", g)
     els += pe
-    els.append(text(cx, cy + 4, "← New item", size=16, color=INK))
-    f, y = field(cx, cy + 36, cw, "Name *", "White A-Line", [g])
-    els += f
-    els.append(text(cx, y, "SKU auto · Purpose: Sale|Rent|Both", size=12, color=MUTED, width=cw))
-    f, y = field(cx, y + 28, cw, "Size / Color", "M / White", [g])
-    els += f
-    f, y = field(cx, y, cw, "Sale / Rental price", "12000 / 2500", [g])
-    els += f
-    els += btn(cx, y + 16, cw, 48, "Save item", True, [g])
+    els.append(text(cx, cy + 4, "← ADF26-0042", size=14, color=INK))
+    els.append(rect(cx, cy + 28, cw, 100, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx, cy + 140, "White A-Line Dress", size=16, color=INK))
+    els.append(text(cx, cy + 168, "On hand 1 · Reserved 0 · Avail 1\nCost 7,500 · Worth 7,500 AFN", size=12, color=MUTED, width=cw))
+    els += btn(cx, cy + 230, (cw - 8) / 2, 36, "Adjust", False, [g])
+    els += btn(cx + (cw - 8) / 2 + 8, cy + 230, (cw - 8) / 2, 36, "Reserve", False, [g])
+    els += btn(cx, cy + 276, (cw - 8) / 2, 36, "Dispose", False, [g])
+    els += btn(cx + (cw - 8) / 2 + 8, cy + 276, (cw - 8) / 2, 36, "Edit", True, [g])
 
     x = 3 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "4. Adjust stock", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "4. Manual stock entry", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Adjust · On hand: 1", size=16, color=INK))
-    f, y = field(cx, cy + 50, cw, "Reason", "Damage ▾", [g])
+    de, fx, fy, fw = drawer(cx - 8, cy - 8, cw + 16, PHONE_H - 80, "Manual stock in", "right", cw + 16, [g])
+    els += de
+    f, y = field(fx, fy, fw, "Warehouse *", "WH-A ▾", [g])
     els += f
-    f, y = field(cx, y, cw, "Counted qty", "0", [g])
+    f, y = field(fx, y, fw, "Item *", "White A-Line ▾", [g])
     els += f
-    els += btn(cx, y + 20, cw, 48, "Post adjustment", True, [g])
+    f, y = field(fx, y, fw, "Qty * / Unit cost", "1 / 7500", [g])
+    els += f
+    els += btn(fx, y + 12, fw, 40, "Post stock in", True, [g])
+    els.append(text(fx, y + 64, "→ creates stock_in txn", size=11, color=MUTED))
 
     x = 4 * (PHONE_W + GAP_X)
     g = nid()
-    pe, cx, cy, cw = phone_shell(x, 0, "5. Transfer", g)
+    pe, cx, cy, cw = phone_shell(x, 0, "5. Receive PO (basic)", g)
     els += pe
-    els.append(text(cx, cy + 8, "← Transfer", size=16, color=INK))
-    f, y = field(cx, cy + 50, cw, "From → To", "Main → Floor 2", [g])
+    els.append(text(cx, cy + 8, "← Receive · PO-012", size=15, color=INK))
+    els.append(text(cx, cy + 44, "Fashion Co · WH-A", size=12, color=MUTED))
+    els.append(rect(cx, cy + 70, cw, 70, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 10, cy + 88, "New dress · qty 1 · cost 7,500\nSize M · Color White", size=12, color=INK))
+    els += btn(cx, cy + 160, cw, 44, "Post receive → stock_in", True, [g])
+
+    x = 5 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "6. Adjust / Dispose", g)
+    els += pe
+    els.append(text(cx, cy + 4, "Stock actions", size=16, color=INK))
+    els.append(rect(cx, cy + 36, cw, 200, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 12, cy + 48, "Adjust", size=14, color=INK))
+    f, y = field(cx + 12, cy + 72, cw - 24, "Reason / Counted", "Damage / 0", [g])
     els += f
-    els.append(rect(cx, y + 8, cw, 50, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 10, y + 24, "White A-Line · qty 1", size=13, color=INK))
-    els += btn(cx, y + 80, cw, 48, "Send transfer", True, [g])
+    els += btn(cx + 12, y + 8, cw - 24, 36, "Post adjustment", False, [g])
+    els.append(rect(cx, cy + 260, cw, 160, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 12, cy + 272, "Dispose", size=14, color=DANGER))
+    f, y = field(cx + 12, cy + 296, cw - 24, "Reason / Qty", "Scrap / 1", [g])
+    els += f
+    els += btn(cx + 12, y + 8, cw - 24, 36, "Post dispose", False, [g])
 
-    els += flow_arrows(5, PHONE_W, TITLE_H + PHONE_H / 2)
+    x = 6 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "7. Reserve + Transfer", g)
+    els += pe
+    f, y = field(cx, cy + 20, cw, "Reserve dates", "19 → 21 Sep", [g])
+    els += f
+    els.append(text(cx, y + 4, "Conflict check on same SKU", size=11, color=MUTED))
+    els += btn(cx, y + 28, cw, 36, "Reserve", True, [g])
+    f, y = field(cx, y + 80, cw, "Transfer From→To", "Main → Floor2", [g])
+    els += f
+    els += btn(cx, y + 12, cw, 36, "Send transfer", False, [g])
+
+    x = 7 * (PHONE_W + GAP_X)
+    g = nid()
+    pe, cx, cy, cw = phone_shell(x, 0, "8. Ledger & worth", g)
+    els += pe
+    els.append(text(cx, cy + 4, "Transactions", size=16, color=INK))
+    els += filter_chips(cx, cy + 36, ["All", "In", "Out", "Adj"], [g])
+    for i, row in enumerate([
+        "IN  PO-012  +1  7.5k",
+        "OUT SO-018  −1  sale",
+        "RSV SO-019  hold",
+        "DSP DSP-03  −1",
+    ]):
+        yy = cy + 80 + i * 48
+        els.append(rect(cx, yy, cw, 42, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 10, yy + 12, row, size=12, color=INK))
+    els.append(text(cx, cy + 290, "Report: stock worth 2.4M AFN", size=13, color=ACCENT, width=cw))
+
+    els += flow_arrows(8, PHONE_W, TITLE_H + PHONE_H / 2)
     return doc(els)
-
 
 def m_sales():
     els = [text(0, -80, "BOMS Mobile — Sales", size=28, color=INK)]
@@ -731,28 +824,16 @@ def table_row(x, y, w, label, g, h=40):
 
 
 def d_auth():
-    """Public login only + in-app users / roles & permissions."""
     els = [text(0, -100, "BOMS Desktop — Auth & Authorization", size=28, color=INK)]
-    els.append(
-        text(
-            0,
-            -60,
-            "Public: Login only. Users & Roles live behind auth (Owner/Admin). Tenant self-signup removed — Super Admin creates tenants in Settings.",
-            size=14,
-            color=MUTED,
-            width=2400,
-        )
-    )
+    els.append(text(0, -60, "Public: Login only. Invite removed. Users always tenant-bound. Multi-role via multi-select. Locale from tenant settings (no login language switcher).", size=14, color=MUTED, width=2800))
     card_w = 420
 
-    # ── Row 1: public auth ──
-    # 1. Login only
     ox, oy = grid_pos(0, 4, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "1. Login (system entry)", "Home", g, show_sidebar=False)
     els += pe
     card_x = cx + (cw - card_w) / 2
-    els.append(rect(card_x, cy + 40, card_w, 460, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
+    els.append(rect(card_x, cy + 40, card_w, 420, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
     els.append(text(card_x + 40, cy + 80, "BOMS", size=32, color=ACCENT, width=card_w - 80, align="center"))
     els.append(text(card_x + 40, cy + 130, "Sign in to your tenant", size=14, color=MUTED, width=card_w - 80, align="center"))
     f, y = field(card_x + 40, cy + 180, card_w - 80, "Phone or Email", "0700… / name@mail.com", [g])
@@ -761,114 +842,92 @@ def d_auth():
     els += f
     els.append(text(card_x + 40, y + 6, "Forgot password?", size=13, color=ACCENT))
     els += btn(card_x + 40, y + 44, card_w - 80, 48, "Sign in", True, [g])
-    els.append(text(card_x + 40, y + 110, "Language: EN | دری | پښتو | عربی", size=12, color=MUTED, width=card_w - 80, align="center"))
-    els += note(card_x + 24, cy + 460, card_w - 48, "Unauthenticated: only this page is visible", [g])
+    els += note(card_x + 24, cy + 420, card_w - 48, "After login: UI language + RTL/LTR from tenant default language", [g])
 
-    # 2. Forgot password
     ox, oy = grid_pos(1, 4, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "2. Forgot password", "Home", g, show_sidebar=False)
     els += pe
     card_x = cx + (cw - card_w) / 2
-    els.append(rect(card_x, cy + 80, card_w, 360, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
+    els.append(rect(card_x, cy + 80, card_w, 320, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
     els.append(text(card_x + 40, cy + 110, "Reset password", size=22, color=INK, width=card_w - 80, align="center"))
     f, y = field(card_x + 40, cy + 170, card_w - 80, "Phone or Email", "", [g])
     els += f
     els += btn(card_x + 40, y + 24, card_w - 80, 48, "Send reset code / link", True, [g])
     els.append(text(card_x + 40, y + 90, "← Back to login", size=13, color=ACCENT, width=card_w - 80, align="center"))
 
-    # 3. Accept invite
     ox, oy = grid_pos(2, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Accept invitation", "Home", g, show_sidebar=False)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Users — tenant-bound list", "Settings", g)
     els += pe
-    card_x = cx + (cw - card_w) / 2
-    els.append(rect(card_x, cy + 60, card_w, 420, strokeColor=LINE, backgroundColor=BG, strokeWidth=2, groupIds=[g]))
-    els.append(text(card_x + 40, cy + 90, "Join Al Dubai Bridal", size=20, color=INK, width=card_w - 80, align="center"))
-    els.append(text(card_x + 40, cy + 130, "Invited as Cashier · Branch Main", size=13, color=MUTED, width=card_w - 80, align="center"))
-    f, y = field(card_x + 40, cy + 180, card_w - 80, "Full name *", "", [g])
-    els += f
-    f, y = field(card_x + 40, y, card_w - 80, "Set password *", "", [g])
-    els += f
-    f, y = field(card_x + 40, y, card_w - 80, "Confirm password *", "", [g])
-    els += f
-    els += btn(card_x + 40, y + 24, card_w - 80, 48, "Accept & join", True, [g])
-
-    # 4. Users list
-    ox, oy = grid_pos(3, 4, DESK_W, DESK_H)
-    g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Users — list / search / filter", "Settings", g)
-    els += pe
-    he, y = page_header(cx, cy, cw, "Users", [("+ Create user", True), ("Send invitation", False)], [g])
+    he, y = page_header(cx, cy, cw, "Users", [("+ Create user", True)], [g])
     els += he
-    els += search_bar(cx, y, cw * 0.42, "Search name / phone / email", [g])
-    els += filter_chips(cx + cw * 0.44, y + 4, ["All", "Active", "Invited", "Inactive", "Role ▾", "Branch ▾"], [g])
+    els += search_bar(cx, y, cw * 0.36, "Search name / phone / email", [g])
+    els += filter_chips(cx + cw * 0.38, y + 4, ["All", "Active", "Inactive", "Role ▾", "Tenant ▾", "Branch ▾"], [g])
     y += 52
-    els += table_header(cx, y, cw, ["Name", "Contact", "Role", "Branch", "Status", "Actions"], [g])
+    els += table_header(cx, y, cw, ["Name", "Tenant", "Contact", "Roles", "Branch", "Status", "Actions"], [g])
     rows = [
-        "Ahmad Karimi   0700…   Owner     Main   Active    Edit | Change role | Invite | Delete",
-        "Laila Nazari   0780…   Cashier   Main   Active    Edit | Change role | Invite | Delete",
-        "Omar Rahimi    o@…     Staff     Floor2 Invited   Edit | Change role | Resend | Delete",
-        "Sara Admin     s@…     Manager   Main   Active    Edit | Change role | Invite | Delete",
+        "Ahmad Karimi   ADF   0700…   Owner, Manager   Main   Active    Edit | Roles | Deactivate",
+        "Laila Nazari   ADF   0780…   Cashier, Staff   Main   Active    Edit | Roles | Deactivate",
+        "Omar Rahimi    ADF   o@…     Staff            Floor2 Inactive  Edit | Roles | Activate",
+        "Sara Admin     KBM   s@…     Manager          Main   Active    Edit | Roles | Deactivate",
     ]
     for i, r in enumerate(rows):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
-    els += note(cx, y + 250, cw, "Row actions: Edit · Delete/Deactivate · Send invitation · Change role", [g])
+    els += note(cx, y + 250, cw, "No invite actions. Roles column shows multi-role chips. Super Admin can filter by tenant.", [g])
 
-    # ── Row 2: user form, invite/role, roles list, permissions ──
-    # 5. Create / Edit user
+    ox, oy = grid_pos(3, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Create user · drawer (LTR→right)", "Settings", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Users", [("+ Create user", True)], [g])
+    els += he
+    els += table_header(cx, y, cw * 0.55, ["Name", "Roles", "Status"], [g])
+    els += table_row(cx, y + 40, cw * 0.55, "Ahmad · Owner, Manager · Active", [g], 42)
+    els += table_row(cx, y + 86, cw * 0.55, "Laila · Cashier, Staff · Active", [g], 42)
+    de, fx, fy, fw = drawer(cx, cy - 10, cw, ch + 20, "Create user", "right", 400, [g])
+    els += de
+    f, y2 = field(fx, fy, fw, "Tenant *", "Al Dubai Bridal (ADF) ▾", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Full name *", "Laila Nazari", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Phone * / Email", "0780… / laila@…", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Password *", "••••••••", [g])
+    els += f
+    els.append(text(fx, y2 + 4, "Roles * (multi-select)", size=12, color=MUTED))
+    els += chip(fx, y2 + 28, "Cashier ✓", ACCENT, [g])
+    els += chip(fx + 100, y2 + 28, "Staff ✓", ACCENT, [g])
+    els += chip(fx + 190, y2 + 28, "Manager", MUTED, [g])
+    f, y2 = field(fx, y2 + 70, fw, "Default branch *", "Main ▾", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Status", "Active ▾", [g])
+    els += f
+    els += btn(fx, y2 + 12, fw, 40, "Save user", True, [g])
+
     ox, oy = grid_pos(4, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Create / Edit user", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Manage user roles (multi)", "Settings", g)
     els += pe
-    he, y = page_header(cx, cy, cw, "Create user", [("Cancel", False), ("Save user", True)], [g])
+    he, y = page_header(cx, cy, cw, "Laila Nazari · Roles", [("Cancel", False), ("Save roles", True)], [g])
     els += he
-    f, y = field(cx, y, 420, "Full name *", "Laila Nazari", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 52, 420, "Phone *", "0780…", [g])
-    els += f
-    f, y = field(cx, y, 420, "Email", "laila@…", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 114, 420, "Role *", "Cashier ▾", [g])
-    els += f
-    f, y = field(cx, y, 420, "Default branch *", "Main ▾", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 176, 420, "Status", "Active ▾", [g])
-    els += f
-    els.append(text(cx, y + 8, "[✓] Send invitation email/SMS after save", size=13, color=INK))
-    els += btn(cx, y + 48, 160, 40, "Save user", True, [g])
-    els += btn(cx + 170, y + 48, 160, 40, "Save & invite", False, [g])
-    els += btn(cx + 340, y + 48, 180, 40, "Deactivate user", False, [g])
+    els.append(text(cx, y, "Tenant: Al Dubai Bridal · Effective permissions = union of selected roles", size=13, color=MUTED, width=cw))
+    y += 36
+    left = cw * 0.48 - 8
+    els.append(rect(cx, y, left, 420, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 16, y + 16, "Assign roles", size=16, color=INK))
+    for i, (role, on) in enumerate([("Owner (system)", False), ("Manager", False), ("Cashier", True), ("Staff", True)]):
+        yy = y + 56 + i * 56
+        els.append(rect(cx + 16, yy, left - 32, 48, strokeColor=LINE, backgroundColor=SOFT2 if on else BG, strokeWidth=1, groupIds=[g]))
+        els.append(text(cx + 28, yy + 14, f"{'[✓]' if on else '[ ]'}  {role}", size=14, color=INK))
+    rx = cx + cw * 0.52
+    els.append(rect(rx, y, left, 420, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
+    els.append(text(rx + 16, y + 16, "Effective permissions preview", size=16, color=INK))
+    els.append(text(rx + 16, y + 56, "Inventory: View\nSales: View · Create · Edit\nFinance: View\nProcurement: —\nSettings: —", size=13, color=MUTED, width=left - 32))
 
-    # 6. Invite + Change role panels
     ox, oy = grid_pos(5, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Invite user · Change role", "Settings", g)
-    els += pe
-    left_w = cw * 0.48 - 8
-    els.append(rect(cx, cy, left_w, 520, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 20, cy + 20, "Send invitation", size=18, color=INK))
-    f, y = field(cx + 20, cy + 60, left_w - 40, "Phone or Email *", "", [g])
-    els += f
-    f, y = field(cx + 20, y, left_w - 40, "Role *", "Cashier ▾", [g])
-    els += f
-    f, y = field(cx + 20, y, left_w - 40, "Branch *", "Main ▾", [g])
-    els += f
-    els.append(text(cx + 20, y + 8, "Expires in 7 days · link + OTP", size=12, color=MUTED))
-    els += btn(cx + 20, y + 40, left_w - 40, 44, "Send invitation", True, [g])
-    rx = cx + cw * 0.52
-    els.append(rect(rx, cy, left_w, 520, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-    els.append(text(rx + 20, cy + 20, "Change role", size=18, color=INK))
-    els.append(text(rx + 20, cy + 60, "User: Laila Nazari\nCurrent role: Cashier", size=14, color=MUTED, width=left_w - 40))
-    f, y = field(rx + 20, cy + 120, left_w - 40, "New role *", "Manager ▾", [g])
-    els += f
-    els.append(text(rx + 20, y + 8, "Permissions update immediately on save", size=12, color=MUTED, width=left_w - 40))
-    els += btn(rx + 20, y + 40, left_w - 40, 44, "Update role", True, [g])
-
-    # 7. Roles list
-    ox, oy = grid_pos(6, 4, DESK_W, DESK_H)
-    g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Roles — list / search / filter", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Roles — list / search / filter", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Roles & permissions", [("+ Create role", True)], [g])
     els += he
@@ -878,17 +937,15 @@ def d_auth():
     els += table_header(cx, y, cw, ["Role", "Type", "Users", "Permissions", "Status", "Actions"], [g])
     for i, r in enumerate([
         "Owner     System   1   All modules     Active   View (locked)",
-        "Manager   Custom   1   24 permissions  Active   Edit | Delete",
-        "Cashier   Custom   2   12 permissions  Active   Edit | Delete",
+        "Manager   Custom   1   28 permissions  Active   Edit | Delete",
+        "Cashier   Custom   2   14 permissions  Active   Edit | Delete",
         "Staff     Custom   3    8 permissions  Active   Edit | Delete",
     ]):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
-    els += note(cx, y + 250, cw, "System roles (Owner) cannot be deleted. Custom roles support full CRUD.", [g])
 
-    # 8. Role edit + permission matrix
-    ox, oy = grid_pos(7, 4, DESK_W, DESK_H)
+    ox, oy = grid_pos(6, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. Role edit · permission matrix", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Role edit · permission matrix", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Edit role: Cashier", [("Cancel", False), ("Save role", True)], [g])
     els += he
@@ -896,26 +953,40 @@ def d_auth():
     els += f
     f, _ = field(cx + 380, cy + 52, 360, "Description", "POS & rental desk", [g])
     els += f
-    els.append(text(cx, y + 8, "Permissions by module", size=14, color=MUTED))
-    y += 36
-    els += table_header(cx, y, cw, ["Module", "View", "Create", "Edit", "Void / Delete"], [g])
+    els.append(text(cx, y + 4, "Permission matrix — tick cells · Select all module / Select all action", size=13, color=MUTED, width=cw))
+    y += 32
+    els += table_header(cx, y, cw, ["Module", "View", "Create", "Edit", "Void", "Export", "Approve", "All"], [g])
     matrix = [
-        "Inventory      [✓]   [ ]   [ ]   [ ]",
-        "Sales          [✓]   [✓]   [✓]   [ ]",
-        "Procurement    [ ]   [ ]   [ ]   [ ]",
-        "Finance        [✓]   [ ]   [ ]   [ ]",
-        "Settings       [ ]   [ ]   [ ]   [ ]",
-        "Users / Roles  [ ]   [ ]   [ ]   [ ]",
+        "Platform / Settings   [ ]  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]",
+        "Inventory             [✓]  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]",
+        "Sales                 [✓]  [✓]  [✓]  [ ]  [ ]  [ ]  [ ]",
+        "Procurement           [ ]  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]",
+        "Finance               [✓]  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]",
+        "Users / Roles         [ ]  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]",
+        "Select all actions →  [ ]  [ ]  [ ]  [ ]  [ ]  [ ]  —",
     ]
     for i, r in enumerate(matrix):
-        els += table_row(cx, y + 40 + i * 44, cw, r, [g], 42)
+        els += table_row(cx, y + 40 + i * 42, cw, r, [g], 40)
+    els += note(cx, y + 350, cw, "System Owner role: all cells locked ON. Custom roles fully editable.", [g])
 
-    # flow arrows row1
+    ox, oy = grid_pos(7, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. RTL shell note (Dari/Pashto)", "Settings", g)
+    els += pe
+    els.append(text(cx, cy, "Direction follows tenant language", size=20, color=INK))
+    els.append(text(cx, cy + 40, "English → LTR · drawers from right\nDari / Pashto → RTL · drawers from left\nNo language control on individual pages.", size=14, color=MUTED, width=cw * 0.55))
+    de, fx, fy, fw = drawer(cx, cy - 10, cw, ch + 20, "کاربر جدید", "left", 380, [g])
+    els += de
+    f, y2 = field(fx, fy, fw, "مستاجر *", "العروسی ▾", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "نقش‌ها *", "صندوق‌دار · کارمند", [g])
+    els += f
+    els += btn(fx, y2 + 16, fw, 40, "ذخیره", True, [g])
+
     for i in range(3):
         x1 = i * (DESK_W + GAP_X) + DESK_W + 8
         x2 = (i + 1) * (DESK_W + GAP_X) - 8
         els += arrow(x1, TITLE_H + DESK_H / 2, x2, TITLE_H + DESK_H / 2)
-    # flow arrows row2
     row2_y = DESK_H + ROW_GAP + TITLE_H + DESK_H / 2
     for i in range(3):
         x1 = i * (DESK_W + GAP_X) + DESK_W + 8
@@ -923,39 +994,18 @@ def d_auth():
         els += arrow(x1, row2_y, x2, row2_y)
     return doc(els)
 
-
 def d_platform():
-    """Tenant + branches/warehouses + master data CRUD."""
     els = [text(0, -100, "BOMS Desktop — Platform / Settings", size=28, color=INK)]
-    els.append(
-        text(
-            0,
-            -60,
-            "Super Admin: Tenants CRUD. Tenant admins: Tenant profile, Branches (1→N Warehouses), Currencies, Units, Payment methods/terms, Preferences, Languages, Audit log.",
-            size=14,
-            color=MUTED,
-            width=2600,
-        )
-    )
+    els.append(text(0, -60, "Tenant forms in drawers. Currency · Language · Timezone are separate fields. City then Address. Languages: EN (LTR), Dari (RTL), Pashto (RTL).", size=14, color=MUTED, width=3000))
 
-    # 1. Settings hub
     ox, oy = grid_pos(0, 5, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "1. Settings hub", "Settings", g)
     els += pe
     cards = [
-        "Tenants (Super Admin)",
-        "Tenant profile",
-        "Branches & warehouses",
-        "Currencies",
-        "Units",
-        "Payment methods",
-        "Payment terms",
-        "Preferences",
-        "Languages",
-        "Audit log",
-        "Users → Auth",
-        "Roles → Auth",
+        "Tenants (Super Admin)", "Tenant profile", "Branches & warehouses",
+        "Currencies", "Units", "Payment methods", "Payment terms",
+        "Preferences & language", "Audit log", "Users → Auth", "Roles → Auth",
     ]
     for i, cname in enumerate(cards):
         xx = cx + (i % 3) * ((cw - 24) / 3 + 12)
@@ -963,59 +1013,61 @@ def d_platform():
         els.append(rect(xx, yy, (cw - 24) / 3, 76, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
         els.append(text(xx + 14, yy + 28, cname + "  ›", size=14, color=INK, width=(cw - 24) / 3 - 28))
 
-    # 2. Tenants list
     ox, oy = grid_pos(1, 5, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "2. Tenants — Super Admin CRUD", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Tenants", [("+ Create tenant", True)], [g])
     els += he
-    els += note(cx, y - 4, cw, "Visible only with Super Admin permission", [g])
+    els += note(cx, y - 4, cw, "Visible only with Super Admin permission · Create opens drawer", [g])
     y += 44
     els += search_bar(cx, y, cw * 0.38, "Search name / code", [g])
-    els += filter_chips(cx + cw * 0.4, y + 4, ["All types", "Shop", "Mall", "Other", "Active", "Inactive"], [g])
+    els += filter_chips(cx + cw * 0.4, y + 4, ["All types", "Shop", "Mall", "Other", "Active"], [g])
     y += 52
-    els += table_header(cx, y, cw, ["Code", "Name", "Type", "Contact", "Branches", "Status", "Actions"], [g])
+    els += table_header(cx, y, cw, ["Code", "Name", "Type", "City", "Language", "Status", "Actions"], [g])
     for i, r in enumerate([
-        "ADF   Al Dubai Bridal    Shop   0700…   2   Active    Edit | Profile | Delete",
-        "KBM   Kabul City Mall    Mall   0780…   5   Active    Edit | Profile | Delete",
-        "GWN   Green Wedding Co   Shop   g@…     1   Inactive  Edit | Profile | Delete",
+        "ADF   Al Dubai Bridal    Shop   Kabul   English   Active    Edit | Profile",
+        "KBM   Kabul City Mall    Mall   Kabul   Dari      Active    Edit | Profile",
+        "GWN   Green Wedding Co   Shop   Herat   Pashto    Inactive  Edit | Profile",
     ]):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
 
-    # 3. Create / Edit tenant
     ox, oy = grid_pos(2, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Create / Edit tenant", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Create tenant · drawer fields", "Settings", g)
     els += pe
-    he, y = page_header(cx, cy, cw, "Create tenant", [("Cancel", False), ("Save tenant", True)], [g])
+    he, y = page_header(cx, cy, cw, "Tenants", [("+ Create tenant", True)], [g])
     els += he
-    f, y = field(cx, y, 420, "Tenant name *", "Al Dubai Bridal", [g])
+    els += table_row(cx, y, cw * 0.48, "ADF · Al Dubai · Shop · Active", [g], 42)
+    de, fx, fy, fw = drawer(cx, cy - 10, cw, ch + 20, "Create tenant", "right", 440, [g])
+    els += de
+    f, y2 = field(fx, fy, fw, "Tenant name *", "Al Dubai Bridal", [g])
     els += f
-    f, _ = field(cx + 450, cy + 52, 420, "Code * (SKU prefix)", "ADF", [g])
+    f, y2 = field(fx, y2, fw, "Code * / Type *", "ADF · Shop ▾", [g])
     els += f
-    f, y = field(cx, y, 420, "Tenant type * (enum)", "Shop ▾   [ + Manage types ]", [g])
+    f, y2 = field(fx, y2, fw, "Business mode", "Both ▾", [g])
     els += f
-    f, _ = field(cx + 450, cy + 114, 420, "Business mode", "Both ▾  Sale | Rental | Both", [g])
+    f, y2 = field(fx, y2, fw, "Phone / Email / Website", "0700… · info@…", [g])
     els += f
-    els.append(text(cx, y + 4, "Contact", size=14, color=MUTED))
-    f, y = field(cx, y + 28, 420, "Phone *", "0700…", [g])
+    f, y2 = field(fx, y2, fw, "City *", "Kabul ▾", [g])
     els += f
-    f, _ = field(cx + 450, cy + 210, 420, "Email / Website", "info@… / aldubai.af", [g])
+    f, y2 = field(fx, y2, fw, "Address", "Shar-e-Naw · Block 4…", [g])
     els += f
-    els.append(text(cx, y + 4, "Address", size=14, color=MUTED))
-    f, y = field(cx, y + 28, 420, "Country / City", "Afghanistan / Kabul", [g])
+    # three separate locale fields (group row — not one combined field)
+    col_w = (fw - 16) / 3
+    locale_y = y2
+    f, _ = field(fx, locale_y, col_w, "Currency *", "AFN ▾", [g])
     els += f
-    f, _ = field(cx + 450, cy + 300, 420, "Street / Building", "Shar-e-Naw · Block 4", [g])
+    f, _ = field(fx + col_w + 8, locale_y, col_w, "Language *", "EN ▾", [g])
     els += f
-    f, y = field(cx, y, 420, "Default currency / Language / TZ", "AFN · EN · Asia/Kabul", [g])
+    f, y2 = field(fx + 2 * (col_w + 8), locale_y, col_w, "Timezone *", "Kabul ▾", [g])
     els += f
-    els.append(text(cx, y + 8, "Type enum examples: Shop · Mall · Boutique · Other (extensible)", size=12, color=MUTED, width=cw))
+    els += note(fx, y2 + 8, fw, "NOT one combined field — Currency · Language · TZ", [g])
+    els += btn(fx, y2 + 56, fw, 40, "Save tenant", True, [g])
 
-    # 4. Tenant profile
     ox, oy = grid_pos(3, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Tenant profile (not shop profile)", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Tenant profile", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Tenant profile", [("Save changes", True)], [g])
     els += he
@@ -1025,48 +1077,43 @@ def d_platform():
     els += f
     f, yy = field(cx + 150, yy, 400, "Code / Type", "ADF · Shop", [g])
     els += f
-    f, yy = field(cx + 150, yy, 400, "Contact phone / email / website", "0700… · info@…", [g])
+    f, yy = field(cx, yy + 20, cw * 0.32 - 8, "City *", "Kabul ▾", [g])
     els += f
-    f, yy = field(cx, yy + 20, cw * 0.48 - 8, "Address line", "Shar-e-Naw, Block 4", [g])
+    f, _ = field(cx + cw * 0.34, yy + 20, cw * 0.64 - 8, "Address", "Shar-e-Naw, Block 4", [g])
     els += f
-    f, _ = field(cx + cw * 0.52, yy + 20, cw * 0.48 - 8, "City / Country / Postal", "Kabul · AF · —", [g])
+    f, yy = field(cx, yy + 90, cw * 0.3 - 8, "Currency *", "AFN ▾", [g])
     els += f
-    els += note(cx, yy + 100, cw, "Renamed from Shop profile → Tenant profile (works for Shop, Mall, …)", [g])
+    f, _ = field(cx + cw * 0.33, yy + 90, cw * 0.3 - 8, "Language *", "English ▾", [g])
+    els += f
+    f, _ = field(cx + cw * 0.66, yy + 90, cw * 0.32 - 8, "Timezone *", "Asia/Kabul ▾", [g])
+    els += f
+    els += note(cx, yy + 170, cw, "City selected first, then address textarea. Locale fields always separate.", [g])
 
-    # 5. Branches list
     ox, oy = grid_pos(4, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Branches — CRUD / search / filter", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Branches — CRUD", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Branches", [("+ Add branch", True)], [g])
     els += he
     els += search_bar(cx, y, cw * 0.4, "Search code / name / city", [g])
-    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Active", "Main only", "Inactive"], [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Active", "Main only"], [g])
     y += 52
     els += table_header(cx, y, cw, ["Code", "Name", "City", "Warehouses", "Main?", "Status", "Actions"], [g])
     for i, r in enumerate([
-        "MAIN   Main Branch     Kabul   3 WH   Yes   Active   Open | Edit | Delete",
-        "FL2    Second Floor    Kabul   1 WH   No    Active   Open | Edit | Delete",
-        "HRT    Herat Outlet    Herat   2 WH   No    Active   Open | Edit | Delete",
+        "MAIN   Main Branch     Kabul   3 WH   Yes   Active   Open | Edit",
+        "FL2    Second Floor    Kabul   1 WH   No    Active   Open | Edit",
+        "HRT    Herat Outlet    Herat   2 WH   No    Active   Open | Edit",
     ]):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
-    els += note(cx, y + 200, cw, "Open branch → manage its warehouses (1 branch : many warehouses)", [g])
 
-    # ── Row 2 ──
-    # 6. Branch detail + warehouses
     ox, oy = grid_pos(5, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Branch detail · warehouses 1→N", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Branch · warehouses 1→N", "Settings", g)
     els += pe
     he, y = page_header(cx, cy, cw, "Branch: Main · MAIN", [("Edit branch", False), ("+ Add warehouse", True)], [g])
     els += he
-    els.append(text(cx, y, "Address: Shar-e-Naw · Manager: Ahmad · Status: Active", size=13, color=MUTED, width=cw))
+    els.append(text(cx, y, "City: Kabul · Address: Shar-e-Naw · Status: Active", size=13, color=MUTED, width=cw))
     y += 36
-    els.append(text(cx, y, "Warehouses under this branch", size=15, color=INK))
-    y += 28
-    els += search_bar(cx, y, cw * 0.4, "Search warehouse", [g])
-    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Default", "Active"], [g])
-    y += 52
     els += table_header(cx, y, cw, ["Code", "Name", "Location", "Default?", "Status", "Actions"], [g])
     for i, r in enumerate([
         "WH-A   Showroom      Floor 1     Yes   Active   Edit | Delete",
@@ -1075,7 +1122,6 @@ def d_platform():
     ]):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
 
-    # 7. Currencies + Units
     ox, oy = grid_pos(6, 5, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Currencies · Units", "Settings", g)
@@ -1092,32 +1138,25 @@ def d_platform():
     els += table_header(rx, cy + 84, left, ["Code", "Name", "Status", "Actions"], [g])
     els += table_row(rx, cy + 124, left, "pcs  Piece   Active  Edit|Del", [g])
     els += table_row(rx, cy + 168, left, "set  Set     Active  Edit|Del", [g])
-    els += table_row(rx, cy + 212, left, "box  Box     Active  Edit|Del", [g])
-    els += note(cx, cy + 280, cw, "Each master list: Create · Read · Update · Delete + search/filter", [g])
 
-    # 8. Payment methods + terms
     ox, oy = grid_pos(7, 5, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. Payment methods · terms", "Settings", g)
     els += pe
     left = cw * 0.48 - 8
     els.append(text(cx, cy, "Payment methods                    [ + Add ]", size=16, color=INK, width=left))
-    els += search_bar(cx, cy + 36, left, "Name", [g])
-    els += filter_chips(cx, cy + 80, ["All", "Active"], [g])
-    els += table_header(cx, cy + 120, left, ["Name", "Status", "Actions"], [g])
+    els += table_header(cx, cy + 40, left, ["Name", "Status", "Actions"], [g])
     for i, r in enumerate(["Cash     Active  Edit|Del", "Card     Active  Edit|Del", "Transfer Active  Edit|Del"]):
-        els += table_row(cx, cy + 160 + i * 44, left, r, [g], 42)
+        els += table_row(cx, cy + 80 + i * 44, left, r, [g], 42)
     rx = cx + cw * 0.52
     els.append(text(rx, cy, "Payment terms                      [ + Add ]", size=16, color=INK, width=left))
-    els += search_bar(rx, cy + 36, left, "Name", [g])
-    els += table_header(rx, cy + 120, left, ["Name", "Rule", "Actions"], [g])
+    els += table_header(rx, cy + 40, left, ["Name", "Rule", "Actions"], [g])
     for i, r in enumerate(["Immediate   due 0d     Edit|Del", "Deposit 50% 50% up front Edit|Del", "Net 7       due +7d    Edit|Del"]):
-        els += table_row(rx, cy + 160 + i * 44, left, r, [g], 42)
+        els += table_row(rx, cy + 80 + i * 44, left, r, [g], 42)
 
-    # 9. Preferences + Languages
     ox, oy = grid_pos(8, 5, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(ox, oy, "9. Preferences · Languages", "Settings", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "9. Preferences · System language", "Settings", g)
     els += pe
     left = cw * 0.48 - 8
     els.append(rect(cx, cy, left, 520, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
@@ -1126,20 +1165,23 @@ def d_platform():
     els += f
     f, y = field(cx + 20, y, left - 40, "Low-stock alert qty", "1", [g])
     els += f
-    f, y = field(cx + 20, y, left - 40, "Nav style / RTL", "Sidebar ▾ · Auto RTL", [g])
-    els += f
-    f, y = field(cx + 20, y, left - 40, "Timezone", "Asia/Kabul ▾", [g])
+    f, y = field(cx + 20, y, left - 40, "Form drawer side", "Auto (LTR→right / RTL→left) ▾", [g])
     els += f
     els += btn(cx + 20, y + 20, 160, 40, "Save preferences", True, [g])
     rx = cx + cw * 0.52
     els.append(rect(rx, cy, left, 520, strokeColor=LINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=[g]))
-    els.append(text(rx + 20, cy + 20, "Languages                    [ + Add ]", size=16, color=INK, width=left - 40))
-    els += search_bar(rx + 20, cy + 60, left - 40, "Language / code", [g])
-    els += table_header(rx + 20, cy + 110, left - 40, ["Code", "Name", "Default", "Actions"], [g])
-    for i, r in enumerate(["en  English  Yes  Edit", "fa  Dari     No   Edit", "ps  Pashto   No   Edit", "ar  Arabic   No   Edit"]):
-        els += table_row(rx + 20, cy + 150 + i * 44, left - 40, r, [g], 42)
+    els.append(text(rx + 20, cy + 20, "System language (tenant default)", size=16, color=INK, width=left - 40))
+    els.append(text(rx + 20, cy + 56, "Whole UI follows this — no per-page language control", size=12, color=MUTED, width=left - 40))
+    for i, (lang, dir_, sel) in enumerate([
+        ("English", "LTR · drawers from right", False),
+        ("Dari / دری", "RTL · drawers from left", True),
+        ("Pashto / پښتو", "RTL · drawers from left", False),
+    ]):
+        yy = cy + 100 + i * 70
+        els.append(rect(rx + 20, yy, left - 40, 60, strokeColor=ACCENT if sel else LINE, backgroundColor=BG, strokeWidth=2 if sel else 1, groupIds=[g]))
+        els.append(text(rx + 32, yy + 12, f"{'[●]' if sel else '[ ]'}  {lang}", size=14, color=INK))
+        els.append(text(rx + 32, yy + 34, dir_, size=12, color=MUTED))
 
-    # 10. Audit log
     ox, oy = grid_pos(9, 5, DESK_W, DESK_H)
     g = nid()
     pe, cx, cy, cw, ch = desk_shell(ox, oy, "10. Audit log", "Settings", g)
@@ -1151,15 +1193,14 @@ def d_platform():
     y += 52
     els += table_header(cx, y, cw, ["Time", "User", "Action", "Entity", "Detail", "IP"], [g])
     for i, r in enumerate([
-        "11 Sep 09:12  Ahmad   LOGIN          session   success           1.2.3.4",
-        "11 Sep 09:40  Ahmad   TENANT_UPDATE   tenant    type Shop→Mall     1.2.3.4",
-        "11 Sep 10:05  Ahmad   USER_INVITE     user      Laila / Cashier    1.2.3.4",
-        "11 Sep 10:22  Ahmad   ROLE_UPDATE      role      Cashier perms      1.2.3.4",
-        "11 Sep 11:01  Sara    BRANCH_CREATE   branch    Herat Outlet       5.6.7.8",
+        "11 Sep 09:12  Ahmad   LOGIN           session   success              1.2.3.4",
+        "11 Sep 09:40  Ahmad   TENANT_UPDATE    tenant    language EN→Dari      1.2.3.4",
+        "11 Sep 10:05  Ahmad   USER_CREATE      user      Laila / Cashier+Staff 1.2.3.4",
+        "11 Sep 10:22  Ahmad   ROLE_UPDATE       role      Cashier perms         1.2.3.4",
+        "11 Sep 11:01  Sara    BRANCH_CREATE    branch    Herat Outlet          5.6.7.8",
     ]):
         els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
 
-    # arrows
     for row in range(2):
         base_y = row * (DESK_H + ROW_GAP) + TITLE_H + DESK_H / 2
         for i in range(4):
@@ -1168,88 +1209,229 @@ def d_platform():
             els += arrow(x1, base_y, x2, base_y)
     return doc(els)
 
-
 def d_inventory():
-    els = [text(0, -80, "BOMS Desktop — Inventory", size=28, color=INK)]
+    els = [text(0, -100, "BOMS Desktop — Inventory (complete movements)", size=28, color=INK)]
+    els.append(text(0, -60, "Hub valuation · PO/manual stock-in · Adjust · Dispose · Transfer · Reserve · Ledger · Reports · SO stock-out / return restock", size=14, color=MUTED, width=3200))
+
+    # Row 1
+    ox, oy = grid_pos(0, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(0, 0, "1. Inventory list", "Inventory", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "1. Inventory hub · stock worth", "Inventory", g)
     els += pe
-    els.append(text(cx, cy, "Inventory", size=22, color=INK))
-    els.append(rect(cx + 200, cy, 280, 36, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 210, cy + 8, "🔍 Search SKU / name / size", size=13, color=LINE))
-    els += btn(cx + cw - 140, cy, 140, 36, "+ Add item", True, [g])
-    els.append(text(cx, cy + 50, "Filters: All · Available · Rented · Sale · Repair   Branch ▾  Category ▾", size=12, color=MUTED, width=cw))
-    els += table_header(cx, cy + 80, cw, ["Image", "SKU", "Name", "Size", "Status", "Sale", "Rent", "Qty", "Actions"], [g])
-    rows = [
-        "□  ADF26-0042  White A-Line     M   Available  12,000  2,500  1  Open",
-        "□  ADF26-0038  Gold Ball Gown   L   Rented     —      2,500  0  Open",
-        "□  ADF26-0031  Veil set         —   Available  1,500  500    4  Open",
-        "□  ADF26-0029  Engagement set   S   Repairing  8,000  1,800  1  Open",
+    he, y = page_header(cx, cy, cw, "Inventory", [("+ Manual entry", True), ("Receive PO", False)], [g])
+    els += he
+    cards = [
+        ("Total stock worth", "2,412,500 AFN", ACCENT),
+        ("On hand units", "124", INK),
+        ("Reserved", "12", WARN),
+        ("Available", "112", OK),
+        ("Low stock", "3", DANGER),
     ]
-    for i, r in enumerate(rows):
-        els += table_row(cx, cy + 120 + i * 44, cw, r, [g], 42)
+    bw = (cw - 48) / 5
+    for i, (lab, val, col) in enumerate(cards):
+        els += kpi_card(cx + i * (bw + 12), y, bw, 72, lab, val, col, [g])
+    y += 96
+    els.append(text(cx, y, "Quick actions", size=14, color=MUTED))
+    y += 28
+    for i, lab in enumerate(["Adjust", "Dispose", "Transfer", "Reserve", "Ledger", "Reports"]):
+        els += btn(cx + i * 160, y, 148, 36, lab, False, [g])
+    els += note(cx, y + 60, cw, "Sales complete → stock_out · Sales return restock → stock_in · Rental → reserve / rent_out / rent_return", [g])
 
-    x = DESK_W + GAP_X
+    ox, oy = grid_pos(1, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "2. Item detail", "Inventory", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "2. Items list", "Inventory", g)
     els += pe
-    els.append(rect(cx, cy, 320, 360, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
-    els.append(text(cx + 120, cy + 170, "photos", size=14, color=MUTED))
-    els.append(text(cx + 350, cy, "White A-Line Dress", size=24, color=INK))
-    els += chip(cx + 350, cy + 40, "Available", OK, [g])
-    els.append(text(cx + 350, cy + 80, "SKU ADF26-0042 · Size M · Color White\nPurpose: Both · Branch Main · WH A\n\nSale price     12,000 AFN\nRental         2,500 / 3 days\nDeposit        1,000 AFN\nCost basis     7,500 AFN\nQty on hand    1", size=14, color=MUTED, width=500))
-    els += btn(cx + 350, cy + 320, 120, 40, "Edit", True, [g])
-    els += btn(cx + 480, cy + 320, 120, 40, "Adjust", False, [g])
-    els += btn(cx + 610, cy + 320, 120, 40, "Transfer", False, [g])
-    els += btn(cx + 740, cy + 320, 140, 40, "Reserve", False, [g])
+    he, y = page_header(cx, cy, cw, "Items", [("+ Add item", True)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.4, "SKU / name / size / barcode", [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["All", "Available", "Reserved", "Rented", "Low"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["SKU", "Name", "Size", "Status", "On hand", "Rsvd", "Avail", "Worth", "Actions"], [g])
+    for i, r in enumerate([
+        "ADF26-0042  White A-Line     M   Available  1  0  1  7,500   Open",
+        "ADF26-0038  Gold Ball Gown   L   Reserved   1  1  0  8,000   Open",
+        "ADF26-0031  Veil set         —   Available  4  0  4  2,000   Open",
+        "ADF26-0029  Engagement set   S   Repairing  1  0  1  6,200   Open",
+    ]):
+        els += table_row(cx, y + 40 + i * 48, cw, r, [g], 46)
 
-    x = 2 * (DESK_W + GAP_X)
+    ox, oy = grid_pos(2, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "3. Add / Edit item", "Inventory", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "3. Item detail · qty & worth", "Inventory", g)
     els += pe
-    els.append(text(cx, cy, "New inventory item", size=22, color=INK))
-    f, y = field(cx, cy + 50, 420, "Name *", "White A-Line", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 50, 420, "SKU (auto)", "ADF26-0043", [g])
-    els += f
-    f, y = field(cx, y, 420, "Category / Type / Model", "Dresses ▾", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 112, 420, "Purpose", "Both ▾", [g])
-    els += f
-    f, y = field(cx, y, 200, "Size", "M", [g])
-    els += f
-    f, _ = field(cx + 220, cy + 174, 200, "Color", "White", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 174, 420, "Sale price / Rental / Deposit", "12000 / 2500 / 1000", [g])
-    els += f
-    f, y = field(cx, y, 420, "Purchase cost / Other / Currency", "7500 / 0 / AFN", [g])
-    els += f
-    f, _ = field(cx + 450, cy + 236, 420, "Branch / Warehouse", "Main / WH-A", [g])
-    els += f
-    els += btn(cx, y + 40, 180, 44, "Save item", True, [g])
+    els.append(rect(cx, cy, 280, 320, strokeColor=LINE, backgroundColor=SOFT, strokeWidth=1, groupIds=[g]))
+    els.append(text(cx + 100, cy + 150, "photos", size=14, color=MUTED))
+    els.append(text(cx + 310, cy, "White A-Line Dress", size=22, color=INK))
+    els += chip(cx + 310, cy + 36, "Available", OK, [g])
+    els.append(text(cx + 310, cy + 80, "SKU ADF26-0042 · Size M · Purpose Both\nBranch Main · WH-A\n\nOn hand 1 · Reserved 0 · Available 1\nUnit cost 7,500 · Stock worth 7,500 AFN\nSale 12,000 · Rent 2,500 / 3d", size=13, color=MUTED, width=520))
+    els += btn(cx + 310, cy + 280, 100, 36, "Edit", True, [g])
+    els += btn(cx + 420, cy + 280, 100, 36, "Adjust", False, [g])
+    els += btn(cx + 530, cy + 280, 100, 36, "Reserve", False, [g])
+    els += btn(cx + 640, cy + 280, 100, 36, "Dispose", False, [g])
+    els += btn(cx + 750, cy + 280, 110, 36, "Transfer", False, [g])
 
-    x = 3 * (DESK_W + GAP_X)
+    ox, oy = grid_pos(3, 4, DESK_W, DESK_H)
     g = nid()
-    pe, cx, cy, cw, ch = desk_shell(x, 0, "4. Adjust & Transfer", "Inventory", g)
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "4. Add / Edit item · drawer", "Inventory", g)
     els += pe
-    els.append(text(cx, cy, "Stock adjustment", size=18, color=INK))
-    els.append(rect(cx, cy + 40, cw * 0.48 - 8, 360, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    f, y = field(cx + 20, cy + 60, cw * 0.48 - 48, "Item", "White A-Line · on hand 1", [g])
+    he, y = page_header(cx, cy, cw, "Items", [("+ Add item", True)], [g])
+    els += he
+    els += table_row(cx, y, cw * 0.5, "ADF26-0042 · White A-Line · Available", [g], 42)
+    de, fx, fy, fw = drawer(cx, cy - 10, cw, ch + 20, "New inventory item", "right", 420, [g])
+    els += de
+    f, y2 = field(fx, fy, fw, "Name *", "White A-Line", [g])
     els += f
-    f, y = field(cx + 20, y, cw * 0.48 - 48, "Reason / Counted qty", "Damage / 0", [g])
+    f, y2 = field(fx, y2, fw, "SKU (auto)", "ADF26-0043", [g])
     els += f
-    els += btn(cx + 20, y + 20, 160, 40, "Post adjustment", True, [g])
-    rx = cx + cw * 0.52
-    els.append(text(rx, cy, "Warehouse transfer", size=18, color=INK))
-    els.append(rect(rx, cy + 40, cw * 0.48 - 8, 360, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=[g]))
-    f, y = field(rx + 20, cy + 60, cw * 0.48 - 48, "From → To", "Main → Floor 2", [g])
+    f, y2 = field(fx, y2, fw, "Category / Type / Model", "Dresses ▾", [g])
     els += f
-    els += table_row(rx + 20, y + 10, cw * 0.48 - 48, "White A-Line · qty 1", [g])
-    els += btn(rx + 20, y + 80, 160, 40, "Send transfer", True, [g])
+    f, y2 = field(fx, y2, fw, "Size / Color / Purpose", "M / White / Both", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Sale / Rent / Deposit", "12000 / 2500 / 1000", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Purchase cost / Currency", "7500 / AFN", [g])
+    els += f
+    f, y2 = field(fx, y2, fw, "Branch / Warehouse", "Main / WH-A", [g])
+    els += f
+    els += btn(fx, y2 + 8, fw, 40, "Save item", True, [g])
 
-    els += flow_arrows(4, DESK_W, TITLE_H + DESK_H / 2)
+    # Row 2 — movements
+    ox, oy = grid_pos(4, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "5. Stock in · Procurement receive", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Receive against PO", [("Cancel", False), ("Post receive", True)], [g])
+    els += he
+    f, y = field(cx, y, 360, "Purchase order *", "PO-012 · Fashion Co ▾", [g])
+    els += f
+    f, _ = field(cx + 380, cy + 52, 360, "Warehouse *", "WH-A ▾", [g])
+    els += f
+    els += table_header(cx, y + 8, cw, ["Item / new", "Ordered", "Receive qty", "Unit cost", "Create SKU?"], [g])
+    els += table_row(cx, y + 48, cw, "New dress (free text)   1   1   7,500   Yes → size M color White", [g], 46)
+    els += table_row(cx, y + 98, cw, "Veil set ADF26-0031     2   2   500    Existing", [g], 46)
+    els += note(cx, y + 170, cw, "Post → inventory_stock_transactions stock_in + update purchase cost · optional mini item form for new lines", [g])
+
+    ox, oy = grid_pos(5, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "6. Stock in · Manual entry", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Manual stock entry", [("Save draft", False), ("Post entry", True)], [g])
+    els += he
+    f, y = field(cx, y, 320, "Entry type", "Opening / Manual in ▾", [g])
+    els += f
+    f, _ = field(cx + 340, cy + 52, 320, "Warehouse *", "WH-A ▾", [g])
+    els += f
+    f, _ = field(cx + 680, cy + 52, 220, "Date", "12 Sep 2026", [g])
+    els += f
+    els += table_header(cx, y + 8, cw, ["Item", "Qty", "Unit cost", "Line worth", "Note"], [g])
+    els += table_row(cx, y + 48, cw, "White A-Line ADF26-0042   1   7,500   7,500   Opening", [g], 46)
+    els += table_row(cx, y + 98, cw, "+ Add line", [g], 40)
+    els += note(cx, y + 160, cw, "Post → stock_in · reference_type=manual_entry · updates on-hand & stock worth", [g])
+
+    ox, oy = grid_pos(6, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "7. Adjustment flow", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Stock adjustment ADJ26-0004", [("Cancel", False), ("Post adjustment", True)], [g])
+    els += he
+    f, y = field(cx, y, 320, "Warehouse *", "WH-A ▾", [g])
+    els += f
+    f, _ = field(cx + 340, cy + 52, 320, "Reason *", "Damage ▾", [g])
+    els += f
+    els += table_header(cx, y + 8, cw, ["Item", "Expected", "Counted", "Difference", "Note"], [g])
+    els += table_row(cx, y + 48, cw, "White A-Line   1   0   −1   Torn lace", [g], 46)
+    els += note(cx, y + 120, cw, "Post → adjustment transaction (signed qty). Not the same as Dispose.", [g])
+
+    ox, oy = grid_pos(7, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "8. Dispose flow", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Dispose DSP26-0002", [("Cancel", False), ("Post dispose", True)], [g])
+    els += he
+    f, y = field(cx, y, 320, "Warehouse *", "WH-A ▾", [g])
+    els += f
+    f, _ = field(cx + 340, cy + 52, 320, "Reason *", "Scrap ▾", [g])
+    els += f
+    els += table_header(cx, y + 8, cw, ["Item", "Qty", "Unit cost", "Write-off worth", "Note"], [g])
+    els += table_row(cx, y + 48, cw, "Engagement set ADF26-0029   1   6,200   6,200   Beyond repair", [g], 46)
+    els += note(cx, y + 120, cw, "Post → dispose txn (negative) · status → disposed when on-hand 0", [g])
+
+    # Row 3
+    ox, oy = grid_pos(8, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "9. Transfer", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Transfer TRF26-0001", [("Send", True)], [g])
+    els += he
+    f, y = field(cx, y, 400, "From → To", "Main / WH-A  →  Floor2 / WH-D", [g])
+    els += f
+    els += table_header(cx, y + 8, cw, ["Item", "Qty", "Note"], [g])
+    els += table_row(cx, y + 48, cw, "Veil set ADF26-0031   2   Event weekend stock", [g], 46)
+    els += note(cx, y + 120, cw, "Send → transfer_out · Receive → transfer_in", [g])
+
+    ox, oy = grid_pos(9, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "10. Reservations", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Reservations", [("+ Reserve", True)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.4, "SKU / customer / SO", [g])
+    els += filter_chips(cx + cw * 0.42, y + 4, ["Active", "Fulfilled", "Released"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Item", "Qty", "From", "To", "SO", "Status", "Actions"], [g])
+    els += table_row(cx, y + 40, cw, "Gold Gown ADF26-0038  1  19 Sep  21 Sep  SO-019  Active  Release", [g], 46)
+    els += table_row(cx, y + 90, cw, "White A-Line ADF26-0042 1  25 Sep 27 Sep  —  Active  Link SO | Release", [g], 46)
+    els += note(cx, y + 160, cw, "Overlapping active reservations on same item blocked. Posts reserve / release txns.", [g])
+
+    ox, oy = grid_pos(10, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "11. Stock transactions ledger", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Stock ledger", [("Export", False)], [g])
+    els += he
+    els += search_bar(cx, y, cw * 0.34, "Txn # / SKU / reference", [g])
+    els += filter_chips(cx + cw * 0.36, y + 4, ["All", "Stock in", "Stock out", "Adjust", "Reserve", "Dispose"], [g])
+    y += 52
+    els += table_header(cx, y, cw, ["Txn", "Type", "Item", "Qty", "Cost", "Reference", "When"], [g])
+    for i, r in enumerate([
+        "TRN-101  stock_in    White A-Line   +1   7,500  PO-012 / GRN-08     10 Sep 11:02",
+        "TRN-102  stock_in    Veil set       +2     500  MSE-003 manual      10 Sep 14:20",
+        "TRN-103  stock_out   White A-Line   −1   7,500  SO-018 sale         11 Sep 16:40",
+        "TRN-104  reserve     Gold Gown      −1   8,000  SO-019 rental       11 Sep 17:05",
+        "TRN-105  dispose     Engagement     −1   6,200  DSP-002             12 Sep 09:15",
+        "TRN-106  stock_in    Veil set       +1     500  RET-004 return      12 Sep 10:00",
+    ]):
+        els += table_row(cx, y + 40 + i * 40, cw, r, [g], 38)
+
+    ox, oy = grid_pos(11, 4, DESK_W, DESK_H)
+    g = nid()
+    pe, cx, cy, cw, ch = desk_shell(ox, oy, "12. Valuation & movement reports", "Inventory", g)
+    els += pe
+    he, y = page_header(cx, cy, cw, "Inventory reports", [("Export CSV", False), ("Print", False)], [g])
+    els += he
+    els += filter_chips(cx, y, ["Valuation", "Movements", "Low stock"], [g])
+    y += 48
+    els += kpi_card(cx, y, (cw - 24) / 3, 70, "Total stock worth", "2,412,500 AFN", ACCENT, [g])
+    els += kpi_card(cx + (cw - 24) / 3 + 12, y, (cw - 24) / 3, 70, "Stock in (period)", "+38 units", OK, [g])
+    els += kpi_card(cx + 2 * ((cw - 24) / 3 + 12), y, (cw - 24) / 3, 70, "Stock out (period)", "−21 units", DANGER, [g])
+    y += 90
+    els += table_header(cx, y, cw, ["SKU", "Name", "On hand", "Reserved", "Available", "Unit cost", "Stock worth"], [g])
+    for i, r in enumerate([
+        "ADF26-0042  White A-Line    1  0  1  7,500  7,500",
+        "ADF26-0038  Gold Ball Gown  1  1  0  8,000  8,000",
+        "ADF26-0031  Veil set        4  0  4    500  2,000",
+        "—  TOTALS                    6  1  5  —      17,500 (page)",
+    ]):
+        els += table_row(cx, y + 40 + i * 44, cw, r, [g], 42)
+    els += note(cx, y + 230, cw, "Worth = on_hand × unit_cost in tenant default currency. Filters: branch · warehouse · category · as-of date.", [g])
+
+    for row in range(3):
+        base_y = row * (DESK_H + ROW_GAP) + TITLE_H + DESK_H / 2
+        for i in range(3):
+            x1 = i * (DESK_W + GAP_X) + DESK_W + 8
+            x2 = (i + 1) * (DESK_W + GAP_X) - 8
+            els += arrow(x1, base_y, x2, base_y)
     return doc(els)
-
 
 def d_sales():
     els = [text(0, -80, "BOMS Desktop — Sales", size=28, color=INK)]

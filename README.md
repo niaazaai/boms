@@ -19,8 +19,8 @@ Stack, language, and infrastructure: **deferred** — discuss next.
 
 ## Modules
 
-1. **Platform** — tenant, auth, branches, users, master data  
-2. **Inventory** — dresses/accessories, stock ledger, reservations  
+1. **Platform** — tenant, auth (tenant-bound users, multi-role), branches, EN/Dari/Pashto LTR-RTL  
+2. **Inventory** — stock ledger, valuation, PO/manual entry, adjust, dispose, reserve  
 3. **Sales** — sale + rental + return  
 4. **Procurement** — suppliers, PO, receive, pay (minimal)  
 5. **Finance** — 5 pillars → end-of-day profit/loss  

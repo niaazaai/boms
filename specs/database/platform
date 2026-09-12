@@ -5,19 +5,24 @@ PLATFORM MODULE
 
     -- Common audit columns on tenant-scoped tables:
     -- tenant_id, created_by, updated_by, created_at, updated_at
+    -- UI language / RTL-LTR: driven by tenants.default_language_id (en=ltr, fa=rtl, ps=rtl).
+    -- No per-page language switcher. Create/edit forms open in a drawer (LTR→right, RTL→left).
 
 
     tenants
         id (PK)
         code                        varchar(20) unique   -- e.g. ADF (used in SKU prefix)
         name                        varchar(255) not null
+        type                        enum('shop','mall','boutique','other') default 'shop'
         phone                       varchar(50)
         email                       varchar(255)
-        address                     text
         website_url                 varchar(255)
         logo_path                   varchar(255)
-        default_currency_id         FK currencies(id)
-        default_language_id         FK languages(id)
+        city                        varchar(100)         -- select city first in forms
+        address                     text                 -- street / building textarea after city
+        default_currency_id         FK currencies(id)    -- separate field (not combined)
+        default_language_id         FK languages(id)     -- en | fa (Dari) | ps (Pashto)
+        timezone                    varchar(50) default 'Asia/Kabul'  -- separate field
         status                      enum('active','inactive','suspended') default 'active'
         created_at
         updated_at
@@ -25,29 +30,33 @@ PLATFORM MODULE
 
     languages
         id (PK)
-        code                        varchar(10) unique   -- e.g. en, fa, ps, ar
-        name                        varchar(50)          -- English, Dari, Pashto, Arabic
+        code                        varchar(10) unique   -- en, fa, ps
+        name                        varchar(50)          -- English, Dari, Pashto
+        native_name                 varchar(50)          -- English, دری, پښتو
         direction                   enum('ltr','rtl') default 'ltr'
+            -- en → ltr ; fa (Dari) → rtl ; ps (Pashto) → rtl
         status                      enum('active','inactive') default 'active'
+        -- Seeded system locales only: English, Dari, Pashto
 
 
     users
         id (PK)
-        tenant_id                   FK tenants(id)
+        tenant_id                   FK tenants(id) not null  -- always tenant-bound
         name                        varchar(255) not null
         email                       varchar(255) not null
         phone                       varchar(50)
         password_hash               varchar(255) not null
         avatar_path                 varchar(255)
         branch_id                   FK branches(id) nullable   -- home / default branch
-        preferred_language_id       FK languages(id)
         last_login_at               timestamptz
-        status                      enum('active','inactive','invited') default 'invited'
+        status                      enum('active','inactive') default 'active'
+            -- No invite status / invite flow. Users are created directly inside a tenant.
         created_by                  FK users(id)
         updated_by                  FK users(id)
         created_at
         updated_at
         -- unique (tenant_id, email)
+        -- UI language follows tenant.default_language_id (not a user preference field)
 
 
     roles
@@ -66,6 +75,7 @@ PLATFORM MODULE
         id (PK)
         code                        varchar(100) unique      -- inventory.items.create
         module                      varchar(50)              -- platform, inventory, sales, procurement, finance
+        action                      varchar(50)              -- view, create, edit, void, export, approve
         name                        varchar(150)
         description                 text
 
@@ -79,10 +89,12 @@ PLATFORM MODULE
 
     user_roles
         id (PK)
+        tenant_id                   FK tenants(id) not null
         user_id                     FK users(id)
         role_id                     FK roles(id)
         branch_id                   FK branches(id) nullable -- role scoped to branch if needed
         -- unique (user_id, role_id, branch_id)
+        -- One user may have many roles (multi-select on create/edit user)
 
 
     branches
@@ -91,6 +103,7 @@ PLATFORM MODULE
         code                        varchar(20)
         name                        varchar(255) not null
         phone                       varchar(50)
+        city                        varchar(100)
         address                     text
         is_main                     boolean default false
         status                      enum('active','inactive') default 'active'
@@ -181,14 +194,16 @@ PLATFORM MODULE
         rental_default_days         int default 3
         rental_deposit_percent      numeric(5,2) default 30
         low_stock_alert             boolean default true
-        timezone                    varchar(50) default 'Asia/Kabul'
         date_format                 varchar(30) default 'YYYY-MM-DD'
         mobile_nav_style            enum('bottom_tabs','drawer') default 'bottom_tabs'
+        form_drawer_side            enum('auto','start','end') default 'auto'
+            -- auto = end in LTR (right), start in RTL (left) based on language direction
         custom_json                 jsonb                    -- extra UI / feature flags
         created_by                  FK users(id)
         updated_by                  FK users(id)
         created_at
         updated_at
+        -- timezone lives on tenants.timezone (shown as its own field on tenant form)
 
 
     audit_logs
