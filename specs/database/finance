@@ -1,36 +1,55 @@
-----------------------------------------------------------------------------------
-FINANCE MODULE
-(5 pillars for bridal shop owner — end-of-day profit / loss at a glance)
+================================================================================
+BOMS — COMPLETE DATABASE SCHEMA  (v2 — corrected)
+Bridal Omnichannel Management System
+Modules: platform · finance-core · inventory · procurement · sales · finance-reporting
+================================================================================
+
+MODULE: FINANCE  (extracted from specs/database/all — that file is authoritative)
+
+CONVENTIONS
+  • Every tenant-scoped table carries: tenant_id, created_by, updated_by,
+    created_at, updated_at.
+  • Every POSTING document additionally carries:
+        business_date   date not null     -- ADR-011
+        idempotency_key uuid              -- ADR-012, unique (tenant_id, key)
+        posted_by       FK users(id)
+        posted_at       timestamptz
+        voided_by       FK users(id)
+        voided_at       timestamptz
+        void_reason     varchar(255)
+        reverses_id     FK <same table>   -- set on the reversing document
+  • Every money-bearing row carries: currency_id, exchange_rate, amount_base
+    (tenant default currency, snapshotted at posting).                   [E8]
+  • Money numeric(18,2) · quantity numeric(18,3) · rate numeric(18,6).
+  • UI language / direction from tenants.default_language_id (en=ltr, fa=rtl,
+    ps=rtl). No per-page switcher. Create/edit forms are drawers
+    (LTR → right, RTL → left).
+
 ----------------------------------------------------------------------------------
 
-    -- FIVE PILLARS (owner dashboard):
-    --   1. Cash & Banks     → how much money is available now
-    --   2. Income           → sales + rental revenue (+ other income)
-    --   3. Expenses         → shop costs (rent, salary, repair, ads, …)
-    --   4. Accounts Payable → what we owe suppliers
-    --   5. Accounts Receivable → what customers still owe us (balances / deposits due)
-    --
-    -- Daily P&L (computed, not a table):
-    --   Profit = Income − Expenses − COGS (from sold/rented item costs)
-    -- Keep entries simple — shop owner should not need an accountant daily.
+2. FINANCE-CORE MODULE
+   (built BEFORE inventory/sales/procurement — they all post into it)     [A4]
+----------------------------------------------------------------------------------
 
 
     finance_accounts
         id (PK)
         tenant_id                   FK tenants(id)
         code                        varchar(30)             -- CASH-MAIN, BANK-AZIZI
-        name                        varchar(150) not null   -- Cash Drawer, Bank Account
+        name                        varchar(150) not null
         account_type                enum('cash','bank','wallet','other') default 'cash'
         currency_id                 FK currencies(id)
         opening_balance             numeric(18,2) default 0
-        current_balance             numeric(18,2) default 0 -- maintained by postings
+        cached_balance              numeric(18,2) default 0
+            -- CACHE ONLY. Truth = opening_balance + Σ posted finance_transactions.
+            -- Refreshed inside the posting transaction; a nightly job compares
+            -- cached vs computed and raises a reconcile_mismatch notification.  [E1]
+        cached_balance_at           timestamptz
         branch_id                   FK branches(id) nullable
         is_default                  boolean default false
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
 
 
     finance_categories
@@ -39,175 +58,298 @@ FINANCE MODULE
         kind                        enum('income','expense') not null
         code                        varchar(30)
         name                        varchar(150) not null
-            -- income examples: dress_sale, rental_fee, late_fee, other_income
-            -- expense examples: shop_rent, salary, utilities, repair, marketing, transport
         parent_id                   FK finance_categories(id) nullable
+        is_system                   boolean default false
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
+        -- Seeded income:  dress_sale, rental_fee, late_fee, forfeited_deposit, other_income
+        -- Seeded expense: shop_rent, salaries, utilities, dry_cleaning, repair,
+        --                 marketing, transport, bank_fees, other_expense
 
 
-    -- Unified money movement ledger (simple, auditable)
-    finance_transactions
+    finance_transactions                    -- THE unified money ledger       [E2]
         id (PK)
         tenant_id                   FK tenants(id)
-        transaction_number          varchar(100) unique     -- FIN26-000001
+        transaction_number          varchar(100)            -- FIN26-000001
+        business_date               date not null
         transaction_date            date not null
         direction                   enum('in','out') not null
         amount                      numeric(18,2) not null
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
-        amount_base                 numeric(18,2) not null  -- in tenant default currency
+        amount_base                 numeric(18,2) not null  -- tenant default currency
 
-        finance_account_id          FK finance_accounts(id)
+        finance_account_id          FK finance_accounts(id) not null
         category_id                 FK finance_categories(id) nullable
         payment_method_id           FK payment_methods(id)
 
-        -- Link back to source documents
         reference_type              varchar(50)
-            -- sales_order_payment, sales_return, purchase_payment,
-            -- expense, income, transfer, opening
-        reference_id                int nullable
+            -- sales_order_payment | sales_sale_return | sales_rental_claim
+            -- | procurement_supplier_payment | procurement_return
+            -- | finance_expense | finance_other_income | finance_account_transfer
+            -- | customer_deposit | opening
+        reference_id                bigint nullable
 
         counterparty_type           enum('customer','supplier','staff','other','none') default 'none'
-        counterparty_id             int nullable
+        counterparty_id             bigint nullable
         counterparty_name           varchar(255)
 
+        is_deposit_movement         boolean default false
+            -- true → affects Cash and the deposit liability, NOT Income.     [C1]
+
         branch_id                   FK branches(id)
         note                        text
-        attachment_path             varchar(255)
-        status                      enum('draft','posted','void') default 'posted'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        status                      enum('posted','void') default 'posted'
+        reverses_id                 FK finance_transactions(id) nullable
+        idempotency_key             uuid
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, transaction_number)                             [A1]
+        -- unique (tenant_id, idempotency_key)                                [A5]
+        -- Void = insert a mirrored reversing row; never edit, never delete.  [E5]
+        -- index (tenant_id, business_date, status), (tenant_id, finance_account_id)
 
 
-    finance_expenses
+    finance_customer_deposits              -- NEW · liability register   [C1][E4]
         id (PK)
         tenant_id                   FK tenants(id)
-        expense_number              varchar(100) unique     -- EXP26-0001
-        expense_date                date not null
-        category_id                 FK finance_categories(id)  -- kind=expense
-        amount                      numeric(18,2) not null
-        currency_id                 FK currencies(id)
-        exchange_rate               numeric(18,6) default 1
-        finance_account_id          FK finance_accounts(id)
-        payment_method_id           FK payment_methods(id)
-        vendor_name                 varchar(255)            -- free text if no supplier
-        supplier_id                 FK procurement_suppliers(id) nullable
-        branch_id                   FK branches(id)
-        note                        text
-        attachment_path             varchar(255)
-        status                      enum('draft','posted','void') default 'posted'
-        finance_transaction_id      FK finance_transactions(id) nullable
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-
-
-    finance_other_income
-        id (PK)
-        tenant_id                   FK tenants(id)
-        income_number               varchar(100) unique     -- INC26-0001
-        income_date                 date not null
-        category_id                 FK finance_categories(id)  -- kind=income
-        amount                      numeric(18,2) not null
-        currency_id                 FK currencies(id)
-        exchange_rate               numeric(18,6) default 1
-        finance_account_id          FK finance_accounts(id)
-        payment_method_id           FK payment_methods(id)
-        branch_id                   FK branches(id)
-        note                        text
-        status                      enum('draft','posted','void') default 'posted'
-        finance_transaction_id      FK finance_transactions(id) nullable
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-
-
-    -- Pillar 4: what we owe (often auto from unpaid POs; manual rows allowed)
-    finance_payables
-        id (PK)
-        tenant_id                   FK tenants(id)
-        payable_number              varchar(100) unique     -- AP26-0001
-        supplier_id                 FK procurement_suppliers(id)
-        purchase_order_id           FK procurement_purchase_orders(id) nullable
-        invoice_no                  varchar(100)
-        issue_date                  date not null
-        due_date                    date
-        currency_id                 FK currencies(id)
-        original_amount             numeric(18,2) not null
-        paid_amount                 numeric(18,2) default 0
-        balance_amount              numeric(18,2) not null
-        status                      enum('open','partial','paid','void') default 'open'
-        note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-
-
-    -- Pillar 5: what customers owe us
-    finance_receivables
-        id (PK)
-        tenant_id                   FK tenants(id)
-        receivable_number           varchar(100) unique     -- AR26-0001
+        deposit_number              varchar(100)            -- DEP26-0001
+        sales_order_id              FK sales_orders(id)
         customer_id                 FK sales_customers(id)
-        sales_order_id              FK sales_orders(id) nullable
-        issue_date                  date not null
-        due_date                    date
         currency_id                 FK currencies(id)
-        original_amount             numeric(18,2) not null
-        paid_amount                 numeric(18,2) default 0
-        balance_amount              numeric(18,2) not null
-        status                      enum('open','partial','paid','void') default 'open'
+        exchange_rate               numeric(18,6) default 1
+
+        taken_amount                numeric(18,2) not null  -- received from customer
+        applied_amount              numeric(18,2) default 0 -- applied to the final balance
+        forfeited_amount            numeric(18,2) default 0 -- kept for damage / late → INCOME
+        refunded_amount             numeric(18,2) default 0 -- returned to customer
+        held_amount                 numeric(18,2) not null
+            -- = taken − applied − forfeited − refunded. The liability balance.
+
+        status                      enum('held','partially_settled','settled') default 'held'
+        business_date               date not null
         note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, deposit_number)
+        -- Pillar 1 shows: cash total, of which deposits held, and "your cash".
 
 
-    -- Internal transfer between cash/bank accounts (not income/expense)
+    finance_cogs_entries                   -- NEW · cost of goods   [C2][E6]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        entry_number                varchar(100)            -- COGS26-000001
+        business_date               date not null
+        kind                        enum('sale_cogs','rental_amortisation') not null
+        sales_order_id              FK sales_orders(id)
+        sales_order_item_id         FK sales_order_items(id)
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,3) not null
+        unit_cost                   numeric(18,2) not null
+            -- sale_cogs          → WAC at the moment of stock_out
+            -- rental_amortisation → item.purchase_cost / expected_rental_uses  (ADR-002)
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null
+        branch_id                   FK branches(id)
+        status                      enum('posted','void') default 'posted'
+        reverses_id                 FK finance_cogs_entries(id) nullable
+        created_by / created_at
+        -- unique (tenant_id, entry_number)
+        -- Written when a sale completes or a rental completes. No cash moves —
+        -- this is why COGS cannot live in finance_transactions.
+        -- index (tenant_id, business_date, kind)
+
+
     finance_account_transfers
         id (PK)
         tenant_id                   FK tenants(id)
-        transfer_number             varchar(100) unique     -- FTR26-0001
+        transfer_number             varchar(100)            -- FTR26-0001
+        business_date               date not null
         transfer_date               date not null
         from_account_id             FK finance_accounts(id)
         to_account_id               FK finance_accounts(id)
         amount                      numeric(18,2) not null
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null
         note                        text
         status                      enum('posted','void') default 'posted'
-        created_by                  FK users(id)
-        created_at
+        reverses_id                 FK finance_account_transfers(id) nullable
+        idempotency_key             uuid
+        created_by / created_at
+        -- unique (tenant_id, transfer_number)
+        -- Posts TWO finance_transactions (out of from_account, in to to_account),
+        -- both with category_id NULL so they never touch Income or Expenses.
+----------------------------------------------------------------------------------
+
+6. FINANCE-REPORTING MODULE
+   (pillars 3–5 documents, P&L, snapshots — built last)
+----------------------------------------------------------------------------------
 
 
-    -- Optional saved daily snapshot for fast owner dashboard history
-    finance_daily_summaries
+    finance_expenses                        -- Pillar 3
         id (PK)
         tenant_id                   FK tenants(id)
-        summary_date                date not null
-        branch_id                   FK branches(id) nullable  -- null = all branches
+        expense_number              varchar(100)            -- EXP26-0001
+        expense_date                date not null
+        business_date               date not null
+        category_id                 FK finance_categories(id)   -- kind='expense'
+        amount                      numeric(18,2) not null
         currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null                    -- [E8]
+        finance_account_id          FK finance_accounts(id)
+        payment_method_id           FK payment_methods(id)
+        finance_transaction_id      FK finance_transactions(id)   -- required once posted
+        vendor_name                 varchar(255)            -- free text if no supplier
+        supplier_id                 FK procurement_suppliers(id) nullable
+        branch_id                   FK branches(id)
+        note                        text
+        status                      enum('draft','posted','void') default 'posted'
+        reverses_id                 FK finance_expenses(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, expense_number)
+        -- Attachments via platform_attachments.                              [A10]
+
+
+    finance_other_income                    -- Pillar 2 (non-sales income)
+        id (PK)
+        tenant_id                   FK tenants(id)
+        income_number               varchar(100)            -- INC26-0001
+        income_date                 date not null
+        business_date               date not null
+        category_id                 FK finance_categories(id)   -- kind='income'
+        amount                      numeric(18,2) not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null
+        finance_account_id          FK finance_accounts(id)
+        payment_method_id           FK payment_methods(id)
+        finance_transaction_id      FK finance_transactions(id)   -- required once posted
+        branch_id                   FK branches(id)
+        note                        text
+        status                      enum('draft','posted','void') default 'posted'
+        reverses_id                 FK finance_other_income(id) nullable
+        idempotency_key             uuid
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, income_number)
+
+
+    finance_payables                        -- Pillar 4 · THE source of A/P    [D4]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        payable_number              varchar(100)            -- AP26-0001
+        supplier_id                 FK procurement_suppliers(id)
+        purchase_order_id           FK procurement_purchase_orders(id) nullable
+        receipt_id                  FK procurement_receipts(id) nullable
+        invoice_no                  varchar(100)
+        issue_date                  date not null
+        due_date                    date
+        business_date               date not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        original_amount             numeric(18,2) not null
+        original_amount_base        numeric(18,2) not null
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) not null
+        balance_amount_base         numeric(18,2) not null
+        status                      enum('open','partial','paid','void') default 'open'
+        note                        text
+        reverses_id                 FK finance_payables(id) nullable
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, payable_number)
+        -- Opened by procurement_receipts on post; reduced by supplier payments
+        -- and supplier returns. procurement_purchase_orders.cached_balance_amount
+        -- mirrors this for display and is never summed for the A/P pillar.
+        -- index (tenant_id, status, due_date) → aging buckets
+
+
+    finance_receivables                     -- Pillar 5 · THE source of A/R    [C8]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        receivable_number           varchar(100)            -- AR26-0001
+        customer_id                 FK sales_customers(id)
+        sales_order_id              FK sales_orders(id) nullable
+        rental_claim_id             FK sales_rental_claims(id) nullable
+        issue_date                  date not null
+        due_date                    date
+        business_date               date not null
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        original_amount             numeric(18,2) not null
+        original_amount_base        numeric(18,2) not null
+        paid_amount                 numeric(18,2) default 0
+        balance_amount              numeric(18,2) not null
+        balance_amount_base         numeric(18,2) not null
+        status                      enum('open','partial','paid','void') default 'open'
+        note                        text
+        reverses_id                 FK finance_receivables(id) nullable
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, receivable_number)
+        -- Opened when an order completes with a balance, or by a rental claim.
+        -- sales_orders.cached_balance_amount mirrors this for display only.
+        -- index (tenant_id, status, due_date) → aging buckets
+
+
+    finance_daily_summaries                 -- CACHE for fast dashboard history
+        id (PK)
+        tenant_id                   FK tenants(id)
+        summary_date                date not null           -- business_date
+        branch_id                   FK branches(id) nullable  -- null = all branches
 
         cash_balance                numeric(18,2) default 0
+        deposits_held               numeric(18,2) default 0   -- liability inside cash  [E4]
+        owner_cash                  numeric(18,2) default 0   -- cash − deposits_held
+
         income_total                numeric(18,2) default 0
         expense_total               numeric(18,2) default 0
-        cogs_total                  numeric(18,2) default 0
-        gross_profit                numeric(18,2) default 0
-        net_profit                  numeric(18,2) default 0
+        cogs_sale_total             numeric(18,2) default 0
+        cogs_rental_amortisation    numeric(18,2) default 0
+        gross_profit                numeric(18,2) default 0   -- income − total COGS
+        net_profit                  numeric(18,2) default 0   -- gross − expenses
+
         receivables_balance         numeric(18,2) default 0
         payables_balance            numeric(18,2) default 0
+        inventory_worth             numeric(18,2) default 0   -- owned_qty × avg_cost
 
         sales_count                 int default 0
         rental_count                int default 0
+        is_stale                    boolean default false                     -- [E7]
+            -- set true whenever any posting lands on a covered business_date;
+            -- recomputed on read or by a nightly job. NEVER a source of truth.
+        computed_at                 timestamptz
         created_at
-        -- unique (tenant_id, summary_date, branch_id, currency_id)
+        -- unique (tenant_id, summary_date, branch_id)
+        -- All amounts in tenant default currency.
+
+
+    -- REPORTING VIEWS (documented for implementers)
+    -- finance_profit_and_loss (period, branch):
+    --     Revenue      : sale revenue + rental revenue + late fees
+    --                    + forfeited deposits + other income
+    --     COGS         : sale_cogs + rental_amortisation
+    --     Gross profit : Revenue − COGS
+    --     Expenses     : by category
+    --     Net profit   : Gross profit − Expenses
+    -- finance_ap_aging / finance_ar_aging: current | 1-30 | 31-60 | 60+
+    -- finance_deposit_register: per order — taken, applied, forfeited,
+    --     refunded, held; total reconciles to the dashboard deposits tile.
+
+
+================================================================================
+BUILD ORDER (ADR-007)
+  1 Platform            tenant, auth, RBAC, branches, warehouses, master data,
+                        sequences, exchange rates, attachments, notifications
+  2 Finance-Core        accounts, categories, finance_transactions,
+                        customer_deposits, cogs_entries, account_transfers
+  3 Inventory           catalogue, ledger, balances (WAC), reservations,
+                        entries, adjustments, disposals, transfers
+  4 Procurement         suppliers, PO, GRN (landed cost), payments, returns → A/P
+  5 Sales               customers, orders (mixed), payments, sale returns,
+                        rental claims → A/R, deposits, COGS
+  6 Finance-Reporting   expenses, other income, payables, receivables,
+                        daily summaries, 5 pillars, P&L
+================================================================================

@@ -1,18 +1,54 @@
-----------------------------------------------------------------------------------
-INVENTORY MODULE
-(bridal dresses, rental outfits, accessories — stock ledger, valuation, movements)
+================================================================================
+BOMS — COMPLETE DATABASE SCHEMA  (v2 — corrected)
+Bridal Omnichannel Management System
+Modules: platform · finance-core · inventory · procurement · sales · finance-reporting
+================================================================================
+
+MODULE: INVENTORY  (extracted from specs/database/all — that file is authoritative)
+
+CONVENTIONS
+  • Every tenant-scoped table carries: tenant_id, created_by, updated_by,
+    created_at, updated_at.
+  • Every POSTING document additionally carries:
+        business_date   date not null     -- ADR-011
+        idempotency_key uuid              -- ADR-012, unique (tenant_id, key)
+        posted_by       FK users(id)
+        posted_at       timestamptz
+        voided_by       FK users(id)
+        voided_at       timestamptz
+        void_reason     varchar(255)
+        reverses_id     FK <same table>   -- set on the reversing document
+  • Every money-bearing row carries: currency_id, exchange_rate, amount_base
+    (tenant default currency, snapshotted at posting).                   [E8]
+  • Money numeric(18,2) · quantity numeric(18,3) · rate numeric(18,6).
+  • UI language / direction from tenants.default_language_id (en=ltr, fa=rtl,
+    ps=rtl). No per-page switcher. Create/edit forms are drawers
+    (LTR → right, RTL → left).
+
 ----------------------------------------------------------------------------------
 
-    -- Notes for bridal shops:
-    -- • One physical dress is usually one inventory_item (SKU) with qty 1.
-    -- • Accessories / veils / shoes may use quantity > 1.
-    -- • Never mutate stock qty directly — always use inventory_stock_transactions.
-    -- • Current on-hand qty = SUM(quantity) of stock transactions for item + warehouse.
-    -- • Reserved qty = SUM(active reservations) OR net of reserve/release transactions.
-    -- • Available qty = on_hand − reserved (never sell/rent below available).
-    -- • Stock worth (valuation) = SUM(on_hand_qty × unit_cost) in tenant default currency.
-    -- Stock-in paths: procurement receive · manual stock entry · sales return restock · rent return
-    -- Stock-out paths: sales order complete · dispose · rent out · transfer out
+3. INVENTORY MODULE
+   (bridal dresses, rental outfits, accessories — ledger, balances, valuation)
+----------------------------------------------------------------------------------
+
+
+    -- QUANTITY MODEL  (ADR-004) — four numbers, one ledger, one reservations table:
+    --   on_hand_qty   = Σ ledger quantity            → physically in the warehouse
+    --   on_rent_qty   = Σ rent_out − Σ rent_return   → out with customers
+    --   owned_qty     = on_hand_qty + on_rent_qty    → what the shop OWNS  ← VALUATION
+    --   reserved_qty  = Σ active reservations        → NOT from the ledger
+    --   available_qty = on_hand_qty − reserved_qty   → sellable / bookable today
+    --
+    -- A dress at a wedding is still an asset: stock worth uses owned_qty.
+    -- Reservations are NOT stock movements — 'reserve'/'release' do not exist.
+    --
+    -- COSTING (ADR-001) — Weighted Average Cost per (item, warehouse):
+    --   stock-in : new_avg = (on_hand×avg + qty_in×landed_unit_cost)/(on_hand+qty_in)
+    --   stock-out: snapshot current avg onto the transaction; avg unchanged
+    --
+    -- Stock-in  paths: procurement receipt · manual entry · sale return restock · transfer in
+    -- Stock-out paths: sale complete · dispose · supplier return · transfer out
+    -- Rental    paths: rent_out (leaves shop) · rent_return (comes back)
 
 
     inventory_main_categories
@@ -21,10 +57,7 @@ INVENTORY MODULE
         title                       varchar(150) not null   -- Bridal Dresses, Rental Wear, Accessories
         sort_order                  int default 0
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
 
 
     inventory_sub_categories
@@ -34,21 +67,15 @@ INVENTORY MODULE
         title                       varchar(150) not null   -- A-Line, Ball Gown, Hijab Set
         sort_order                  int default 0
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
 
 
     inventory_item_types
         id (PK)
         tenant_id                   FK tenants(id)
-        title                       varchar(150) not null   -- Wedding Dress, Engagement Dress, Veil, Jewelry
+        title                       varchar(150) not null   -- Wedding Dress, Veil, Jewelry
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
 
 
     inventory_item_models
@@ -56,16 +83,13 @@ INVENTORY MODULE
         tenant_id                   FK tenants(id)
         title                       varchar(150) not null   -- model / designer name
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
 
 
     inventory_items
         id (PK)
         tenant_id                   FK tenants(id)
-        sku                         varchar(100) unique     -- [{PREFIX}{YEAR}-{000001}] e.g. ADF26-0001
+        sku                         varchar(100) not null   -- ADF26-0042
         name                        varchar(255) not null
         barcode                     varchar(100) nullable
 
@@ -75,55 +99,63 @@ INVENTORY MODULE
         item_model_id               FK inventory_item_models(id)
 
         -- Bridal attributes
-        size                        varchar(30)             -- S, M, L, 38, 40, custom
+        size                        varchar(30)             -- S, M, L, 38, 40
         color                       varchar(50)
         fabric                      varchar(100)
-        season                      varchar(50)             -- Spring 2026, Winter Collection
+        season                      varchar(50)
         purpose                     enum('sale','rental','both') default 'both'
-
-        description                 text
-        components                  text                    -- included pieces / accessories with dress
-        custom_fields               jsonb
         quality                     enum('high','medium','normal','low') default 'normal'
-        reorder_level               numeric(10,2) default 0
+        description                 text
+        components                  text                    -- pieces included with the dress
+        custom_fields               jsonb
 
-        branch_id                   FK branches(id)
-        warehouse_id                FK warehouses(id)
+        -- Stock policy
+        is_serialised               boolean default true
+            -- true  = one physical dress, qty 1 (the usual bridal case)
+            -- false = fungible accessories with qty > 1
+        reorder_level               numeric(18,3) default 0
+        default_warehouse_id        FK warehouses(id) nullable
+            -- FORM CONVENIENCE ONLY. Stock location lives in the ledger and
+            -- inventory_stock_balances — an item may hold stock in many
+            -- warehouses at once.                                            [B5]
 
         -- Sales pricing
         sales_currency_id           FK currencies(id)
         sales_unit_price            numeric(18,2) default 0
         sales_unit_id               FK units(id)
 
-        -- Rental pricing
+        -- Rental pricing & cost recovery
         rental_currency_id          FK currencies(id)
-        rental_price                numeric(18,2) default 0     -- price per rental period
+        rental_price                numeric(18,2) default 0     -- per rental period
         rental_period_days          int default 3
         rental_deposit_amount       numeric(18,2) default 0
         rental_late_fee_per_day     numeric(18,2) default 0
+        rental_buffer_days          int nullable                -- overrides tenant setting  [B7]
+        expected_rental_uses        int nullable                -- overrides tenant default  (ADR-002)
+        amortised_cost_to_date      numeric(18,2) default 0
+            -- accumulates rental_amortisation; capped at acquisition cost.
+            -- Once capped the dress has paid for itself → further rentals carry 0 COGS.
 
-        -- Purchase / cost basis (opening or last purchase) — used for stock worth
-        purchase_opening_date       date
-        purchase_date               date
-        purchase_unit_id            FK units(id)
-        purchase_amount             numeric(18,2) not null default 0
-        purchase_other_cost         numeric(18,2) default 0
-        purchase_currency_id        FK currencies(id)
-        purchase_exchange_rate      numeric(18,6) default 1
+        -- Display-only cost reference (NOT used for valuation — see ADR-001)
+        last_purchase_cost          numeric(18,2) default 0
+        last_purchase_date          date
+        acquisition_cost            numeric(18,2) default 0     -- basis for amortisation
 
-        -- Website / showcase flags (optional storefront)
-        is_featured                 boolean default false
-        is_hot                      boolean default false
-        is_trending                 boolean default false
-        is_wanted                   boolean default false
-
+        lifecycle_status            enum('active','repairing','discontinued','disposed')
+                                    default 'active'
+            -- STORED. This is a property of the item record.                 [B1]
+            -- Availability (available / reserved / rented / out_of_stock) is
+            -- DERIVED from quantities and is NEVER stored.
         repair_note                 varchar(512)
-        status                      enum('available','reserved','rented','sold','repairing','damaged','disposed') default 'available'
 
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, sku)                                            [A1]
+        -- unique (tenant_id, barcode) where barcode is not null
+        -- index (tenant_id, lifecycle_status), (tenant_id, main_category_id)
+        -- REMOVED in v2: branch_id, warehouse_id (→ ledger)                  [B5]
+        --                status enum (→ lifecycle_status + derived)          [B1]
+        --                is_featured/is_hot/is_trending/is_wanted (→ website module)  [F2]
+        --                purchase_* block (→ last_purchase_* + ledger)       [B4]
 
 
     inventory_item_media
@@ -134,186 +166,243 @@ INVENTORY MODULE
         title                       varchar(255)
         sort_order                  int default 0
         is_main                     boolean default false
-        created_by                  FK users(id)
-        created_at
+        created_by / created_at
 
 
-    inventory_stock_transactions
+    inventory_stock_transactions            -- THE immutable stock ledger
         id (PK)
         tenant_id                   FK tenants(id)
-        transaction_number          varchar(100) unique     -- TRN26-000001
+        transaction_number          varchar(100)            -- TRN26-000001
+        business_date               date not null
         inventory_item_id           FK inventory_items(id)
         warehouse_id                FK warehouses(id)
         branch_id                   FK branches(id)
 
         type                        enum(
-                                        'stock_in',         -- procurement / manual / return restock
-                                        'stock_out',        -- sale complete
-                                        'adjustment',       -- count correction (+/-)
+                                        'stock_in',      -- receipt / manual / sale-return restock
+                                        'stock_out',     -- sale complete / supplier return
+                                        'adjustment',    -- count correction (+/−)
                                         'transfer_in',
                                         'transfer_out',
-                                        'reserve',          -- hold for booking
-                                        'release',          -- un-hold
-                                        'rent_out',         -- dress left shop
-                                        'rent_return',      -- dress returned
-                                        'dispose'           -- write-off / scrap (always negative)
+                                        'rent_out',      -- dress left the shop with a customer
+                                        'rent_return',   -- dress came back
+                                        'dispose'        -- write-off (always negative)
                                     )
+                                    -- REMOVED in v2: 'reserve', 'release'.   [B2]
+                                    -- Reservations are not stock movements.
 
-        quantity                    numeric(18,2) not null
-            -- positive: stock_in, transfer_in, release, rent_return, adjustment+
-            -- negative: stock_out, transfer_out, reserve, rent_out, dispose, adjustment-
+        quantity                    numeric(18,3) not null
+            -- positive: stock_in, transfer_in, rent_return, adjustment+
+            -- negative: stock_out, transfer_out, rent_out, dispose, adjustment−
 
         unit_cost                   numeric(18,2) default 0
+            -- stock_in  → landed_unit_cost of the source document
+            -- stock_out → WAC snapshot at the moment of posting
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
-        -- amount_base = quantity * unit_cost * exchange_rate (signed; for valuation reports)
+        amount_base                 numeric(18,2)   -- signed: quantity × unit_cost × rate
 
         reference_type              varchar(50)
-            -- purchase_order | procurement_receipt | manual_entry | adjustment
-            -- transfer | reservation | sales_order | sales_return | disposal
-        reference_id                int nullable
+            -- procurement_receipt | inventory_stock_entry | inventory_adjustment
+            -- | inventory_disposal | inventory_transfer | sales_order
+            -- | sales_sale_return | sales_rental_claim | procurement_return
+        reference_id                bigint nullable
         note                        text
 
-        created_by                  FK users(id)
-        created_at
-        updated_at
-        -- Immutable after create. Reverse with opposite transaction if void needed.
+        reverses_id                 FK inventory_stock_transactions(id) nullable
+        created_by / created_at
+        -- unique (tenant_id, transaction_number)                             [A1]
+        -- IMMUTABLE after insert. Corrections are reversing transactions.    [ADR-005]
+        -- index (tenant_id, inventory_item_id, warehouse_id, business_date)
+        -- index (tenant_id, reference_type, reference_id)
 
 
-    -- Manual stock entry (opening stock / ad-hoc stock-in without PO)
-    inventory_stock_entries
+    inventory_stock_balances                -- NEW · physical table, not a view
         id (PK)
         tenant_id                   FK tenants(id)
-        entry_number                varchar(100) unique     -- MSE26-0001
-        entry_type                  enum('opening','manual_in','manual_correction') default 'manual_in'
+        inventory_item_id           FK inventory_items(id)
+        warehouse_id                FK warehouses(id)
+        branch_id                   FK branches(id)
+
+        on_hand_qty                 numeric(18,3) default 0
+        on_rent_qty                 numeric(18,3) default 0
+        owned_qty                   numeric(18,3) default 0   -- on_hand + on_rent → VALUATION
+        reserved_qty                numeric(18,3) default 0   -- from active reservations
+        available_qty               numeric(18,3) default 0   -- on_hand − reserved
+
+        avg_cost                    numeric(18,2) default 0   -- Weighted Average Cost (ADR-001)
+        stock_value_base            numeric(18,2) default 0   -- owned_qty × avg_cost
+        last_movement_at            timestamptz
+        updated_at
+        -- unique (tenant_id, inventory_item_id, warehouse_id)
+        -- Maintained inside the same DB transaction as every ledger write.
+        -- Rebuildable from inventory_stock_transactions + inventory_reservations
+        -- at any time; a nightly job verifies and raises a mismatch notification.
+
+
+    inventory_stock_entries                 -- manual / opening stock-in
+        id (PK)
+        tenant_id                   FK tenants(id)
+        entry_number                varchar(100)            -- MSE26-0001
+        entry_type                  enum('opening','manual_in','found') default 'manual_in'
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
         entry_date                  date not null
+        business_date               date not null
         note                        text
-        status                      enum('draft','posted','cancelled') default 'draft'
-        posted_at                   timestamptz
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-        -- On post: inventory_stock_transactions type=stock_in, reference_type=manual_entry
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK inventory_stock_entries(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, entry_number)
+        -- On post: stock_in transactions, reference_type=inventory_stock_entry,
+        --          WAC recomputed per line.
 
 
     inventory_stock_entry_items
         id (PK)
         stock_entry_id              FK inventory_stock_entries(id)
         inventory_item_id           FK inventory_items(id)
-        quantity                    numeric(18,2) not null
+        quantity                    numeric(18,3) not null
         unit_cost                   numeric(18,2) default 0
         currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        line_value_base             numeric(18,2) default 0
         note                        text
 
 
     inventory_adjustments
         id (PK)
         tenant_id                   FK tenants(id)
-        adjustment_number           varchar(100) unique     -- ADJ26-0001
+        adjustment_number           varchar(100)            -- ADJ26-0001
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
         reason                      enum('count_mismatch','damage','lost','found','other') default 'other'
         note                        text
-        attachment_path             varchar(255)
-        status                      enum('draft','posted','cancelled') default 'draft'
-        posted_at                   timestamptz
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        business_date               date not null
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK inventory_adjustments(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, adjustment_number)
+        -- Attachments via platform_attachments.                              [A10]
 
 
     inventory_adjustment_items
         id (PK)
         adjustment_id               FK inventory_adjustments(id)
         inventory_item_id           FK inventory_items(id)
-        expected_qty                numeric(18,2)
-        counted_qty                 numeric(18,2)
-        difference_qty              numeric(18,2)           -- counted - expected
+        expected_qty                numeric(18,3)
+        counted_qty                 numeric(18,3)
+        difference_qty              numeric(18,3)           -- counted − expected
+        unit_cost                   numeric(18,2) default 0 -- WAC snapshot
         note                        text
 
 
-    -- Dispose / write-off (damaged beyond repair, scrap, lost permanently)
-    inventory_disposals
+    inventory_disposals                     -- permanent write-off
         id (PK)
         tenant_id                   FK tenants(id)
-        disposal_number             varchar(100) unique     -- DSP26-0001
+        disposal_number             varchar(100)            -- DSP26-0001
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
-        reason                      enum('damaged','expired','lost','scrap','other') default 'damaged'
+        reason                      enum('damaged','lost','scrap','stolen','other') default 'damaged'
         note                        text
-        attachment_path             varchar(255)
-        status                      enum('draft','posted','cancelled') default 'draft'
-        posted_at                   timestamptz
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-        -- On post: stock_transactions type=dispose (negative qty) + item status → disposed when qty 0
+        business_date               date not null
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK inventory_disposals(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, disposal_number)
+        -- On post: dispose transactions (negative) at WAC;
+        --          lifecycle_status → 'disposed' when owned_qty reaches 0.
 
 
     inventory_disposal_items
         id (PK)
         disposal_id                 FK inventory_disposals(id)
         inventory_item_id           FK inventory_items(id)
-        quantity                    numeric(18,2) not null
-        unit_cost                   numeric(18,2) default 0
+        quantity                    numeric(18,3) not null
+        unit_cost                   numeric(18,2) default 0 -- WAC snapshot
+        write_off_value_base        numeric(18,2) default 0
         note                        text
 
 
     inventory_transfers
         id (PK)
         tenant_id                   FK tenants(id)
-        transfer_number             varchar(100) unique     -- TRF26-0001
+        transfer_number             varchar(100)            -- TRF26-0001
         from_warehouse_id           FK warehouses(id)
         to_warehouse_id             FK warehouses(id)
         from_branch_id              FK branches(id)
         to_branch_id                FK branches(id)
         note                        text
-        status                      enum('draft','in_transit','received','cancelled') default 'draft'
+        business_date               date not null
+        status                      enum('draft','in_transit','received','void') default 'draft'
         transferred_at              timestamptz
         received_at                 timestamptz
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        reverses_id                 FK inventory_transfers(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, transfer_number)
+        -- Send    → transfer_out at source WAC
+        -- Receive → transfer_in at the SAME unit cost (cost travels with the goods)
 
 
     inventory_transfer_items
         id (PK)
         transfer_id                 FK inventory_transfers(id)
         inventory_item_id           FK inventory_items(id)
-        quantity                    numeric(18,2) not null
+        quantity                    numeric(18,3) not null
+        unit_cost                   numeric(18,2) default 0
+        received_quantity           numeric(18,3) default 0
         note                        text
 
 
-    -- Reservation rows for calendar / booking UI (also writes reserve/release transactions)
-    inventory_reservations
+    inventory_reservations                  -- the ONLY source of reserved qty  [B2]
         id (PK)
         tenant_id                   FK tenants(id)
+        reservation_number          varchar(100)            -- RSV26-0001
         inventory_item_id           FK inventory_items(id)
         warehouse_id                FK warehouses(id)
         sales_order_id              FK sales_orders(id) nullable
-        reserved_quantity           numeric(18,2) not null default 1
-        reserved_from               date not null           -- event / rental start
-        reserved_to                 date not null
+        sales_order_item_id         FK sales_order_items(id) nullable   -- NEW      [B8]
+        customer_id                 FK sales_customers(id) nullable
+        reserved_quantity           numeric(18,3) not null default 1
+        reserved_from               date not null           -- rental / event start
+        reserved_to                 date not null           -- rental end
+        buffer_days                 int default 0           -- cleaning turnaround  [B7]
+        blocked_until               date not null
+            -- GENERATED: reserved_to + buffer_days. The overlap constraint uses THIS.
         status                      enum('active','fulfilled','released','cancelled') default 'active'
         note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, reservation_number)
+        --
+        -- DOUBLE-BOOKING PREVENTION (ADR-010) — enforced by the database,
+        -- not by application code:
+        --   EXCLUDE USING gist (
+        --     inventory_item_id WITH =,
+        --     daterange(reserved_from, blocked_until, '[]') WITH &&
+        --   ) WHERE (status = 'active')
+        --
+        -- index (tenant_id, inventory_item_id, status)
 
 
-    -- Computed / reporting views (not physical tables — document for implementers)
-    -- inventory_stock_balances (view):
-    --   tenant_id, inventory_item_id, warehouse_id, branch_id,
-    --   on_hand_qty, reserved_qty, available_qty,
-    --   avg_unit_cost, stock_value_base
-    -- inventory_valuation_report (report):
-    --   filters: branch, warehouse, category, date-as-of
-    --   columns: SKU, name, on_hand, reserved, available, unit_cost, stock_worth
-    --   totals: total inventory worth in tenant default currency
+    -- REPORTING VIEWS (documented for implementers, not physical tables)
+    -- inventory_valuation_report:
+    --     filters: branch · warehouse · category · as-of date
+    --     columns: SKU, name, on_hand, on_rent, owned, reserved, available,
+    --              avg_cost, stock_worth (= owned × avg_cost)
+    --     total  : inventory worth in tenant default currency
+    --     as-of  : replays inventory_stock_transactions WHERE business_date <= :as_of
+    -- inventory_stock_in_report:                                             [D5]
+    --     stock-in grouped by SOURCE (receipt | manual | sale return | transfer in),
+    --     qty + value, reconciling to the total inventory increase for the period
+    -- inventory_utilisation_report:                                          [B12]
+    --     per item: acquisition_cost, times_rented, rental_revenue_to_date,
+    --               amortised_cost_to_date, roi_pct, days_idle,
+    --               revenue_per_owned_day, payback_status

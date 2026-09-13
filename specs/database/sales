@@ -1,12 +1,46 @@
-----------------------------------------------------------------------------------
-SALES MODULE
-(easy sale + rental + return for bridal shops — mobile-first cashier flow)
+================================================================================
+BOMS — COMPLETE DATABASE SCHEMA  (v2 — corrected)
+Bridal Omnichannel Management System
+Modules: platform · finance-core · inventory · procurement · sales · finance-reporting
+================================================================================
+
+MODULE: SALES  (extracted from specs/database/all — that file is authoritative)
+
+CONVENTIONS
+  • Every tenant-scoped table carries: tenant_id, created_by, updated_by,
+    created_at, updated_at.
+  • Every POSTING document additionally carries:
+        business_date   date not null     -- ADR-011
+        idempotency_key uuid              -- ADR-012, unique (tenant_id, key)
+        posted_by       FK users(id)
+        posted_at       timestamptz
+        voided_by       FK users(id)
+        voided_at       timestamptz
+        void_reason     varchar(255)
+        reverses_id     FK <same table>   -- set on the reversing document
+  • Every money-bearing row carries: currency_id, exchange_rate, amount_base
+    (tenant default currency, snapshotted at posting).                   [E8]
+  • Money numeric(18,2) · quantity numeric(18,3) · rate numeric(18,6).
+  • UI language / direction from tenants.default_language_id (en=ltr, fa=rtl,
+    ps=rtl). No per-page switcher. Create/edit forms are drawers
+    (LTR → right, RTL → left).
+
 ----------------------------------------------------------------------------------
 
-    -- Sales types:
-    --   sale   = customer buys the dress / accessory
-    --   rental = customer rents for event dates, returns after
-    -- Keep checkout simple: pick customer → add items → deposit/pay → done.
+5. SALES MODULE
+   (customers · orders · sale + rental + mixed · payments · returns · claims)
+----------------------------------------------------------------------------------
+
+
+    -- ORDER MODEL (ADR-008):
+    --   sales_order_items.line_type ('sale' | 'rental') is AUTHORITATIVE.
+    --   sales_orders.order_kind ('sale'|'rental'|'mixed') is DERIVED on save —
+    --   used for badges and filtering only, never for logic.
+    --   One order may rent a gown AND sell a veil. customer_id is nullable for
+    --   sale-only orders (walk-in); ANY rental line requires a customer.
+    --
+    -- DEPOSITS (ADR-003) are a LIABILITY. They increase cash but never Income.
+    -- Settlement on return: applied → revenue · forfeited → income · refunded → out.
 
 
     sales_customers
@@ -14,38 +48,40 @@ SALES MODULE
         tenant_id                   FK tenants(id)
         customer_code               varchar(50)             -- CUS26-0001
         name                        varchar(255) not null
-        phone                       varchar(50)             -- primary search key for shop staff
+        phone                       varchar(50)             -- primary search key
         phone_alt                   varchar(50)
         email                       varchar(255)
         gender                      enum('female','male','other') nullable
-        wedding_date                date nullable           -- bridal context
+        wedding_date                date nullable
         address                     text
+        city                        varchar(100)
         note                        text
         custom_fields               jsonb
         payment_term_id             FK payment_terms(id)
         branch_id                   FK branches(id)
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-        -- index (tenant_id, phone)
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, customer_code)
+        -- index (tenant_id, phone) — staff search by phone first
 
 
     sales_orders
         id (PK)
         tenant_id                   FK tenants(id)
-        order_number                varchar(100) unique     -- SO26-000001
-        order_type                  enum('sale','rental') not null
-        customer_id                 FK sales_customers(id)
+        order_number                varchar(100)            -- SO26-000019
+        order_kind                  enum('sale','rental','mixed') not null
+            -- DERIVED from the lines on every save. Display/filter only.     [C3]
+        customer_id                 FK sales_customers(id) nullable
+            -- nullable = walk-in. REQUIRED when any line_type='rental'.      [C4]
+        walk_in_name                varchar(255) nullable
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
 
         order_date                  date not null
+        business_date               date not null
         event_date                  date nullable           -- wedding / party date
-        -- Rental window (required when order_type = rental)
-        rental_start_date           date nullable
-        rental_end_date             date nullable
+        rental_start_date           date nullable           -- earliest rental line start
+        rental_end_date             date nullable           -- latest rental line end
         actual_return_date          date nullable
 
         currency_id                 FK currencies(id)
@@ -55,34 +91,52 @@ SALES MODULE
         discount_amount             numeric(18,2) default 0
         discount_percent            numeric(5,2) default 0
         tax_amount                  numeric(18,2) default 0
-        deposit_required            numeric(18,2) default 0
-        late_fee_amount             numeric(18,2) default 0
         other_charges               numeric(18,2) default 0
+
+        -- Late fees (computed on "Mark returned")                            [C6]
+        late_days                   int default 0
+            -- = max(0, actual_return_date − rental_end_date)
+        late_fee_amount             numeric(18,2) default 0
+            -- = Σ(line rental_late_fee_per_day × late_days)
+        late_fee_waived_amount      numeric(18,2) default 0
+        late_fee_waive_reason       varchar(255)
+
         total_amount                numeric(18,2) default 0
-        paid_amount                 numeric(18,2) default 0
-        balance_amount              numeric(18,2) default 0 -- total - paid (AR)
+        total_amount_base           numeric(18,2) default 0
+
+        deposit_required            numeric(18,2) default 0
+        cached_deposit_held         numeric(18,2) default 0
+            -- mirror of finance_customer_deposits.held_amount — display only [C1]
+        cached_paid_amount          numeric(18,2) default 0
+        cached_balance_amount       numeric(18,2) default 0
+            -- DISPLAY CACHE ONLY. A/R truth = finance_receivables.           [C8]
 
         payment_method_id           FK payment_methods(id)
         payment_term_id             FK payment_terms(id)
-        payment_status              enum('unpaid','partial','paid','refunded') default 'unpaid'
+        payment_status              enum('unpaid','partial','paid',
+                                         'partially_refunded','refunded') default 'unpaid'   -- [C9]
 
         status                      enum(
                                         'draft',
-                                        'confirmed',        -- stock reserved
-                                        'out',              -- rented out / delivered
-                                        'returned',         -- rental returned
-                                        'completed',        -- sale finished or rental closed
-                                        'cancelled'
+                                        'confirmed',    -- rental stock reserved
+                                        'out',          -- rental delivered / dress left
+                                        'returned',     -- rental came back
+                                        'completed',    -- sale done or rental closed
+                                        'cancelled',
+                                        'void'          -- reversed after completion  [C11]
                                     ) default 'draft'
 
         return_condition            enum('good','needs_cleaning','damaged','lost') nullable
         return_note                 text
         note                        text
-
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        reverses_id                 FK sales_orders(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, order_number)                                   [A1]
+        -- index (tenant_id, business_date, status), (tenant_id, customer_id)
+        -- index (tenant_id, rental_end_date) where order_kind in ('rental','mixed')
+        --       → powers the "due returns today" list
 
 
     sales_order_items
@@ -90,72 +144,131 @@ SALES MODULE
         tenant_id                   FK tenants(id)
         sales_order_id              FK sales_orders(id)
         inventory_item_id           FK inventory_items(id)
-        item_name_snapshot          varchar(255)            -- freeze name at sale time
+        item_name_snapshot          varchar(255)            -- frozen at sale time
         sku_snapshot                varchar(100)
 
-        line_type                   enum('sale','rental') not null
-        quantity                    numeric(18,2) not null default 1
+        line_type                   enum('sale','rental') not null   -- AUTHORITATIVE  [C3]
+        quantity                    numeric(18,3) not null default 1
         unit_price                  numeric(18,2) not null  -- sale price or rental price
         discount_amount             numeric(18,2) default 0
         line_total                  numeric(18,2) not null
-        unit_cost_snapshot          numeric(18,2) default 0 -- for profit calc
+
+        -- Cost (ADR-001 / ADR-002)
+        unit_cost_snapshot          numeric(18,2) default 0
+            -- sale   → WAC at stock_out
+            -- rental → acquisition_cost / expected_rental_uses (amortisation per use)
+        cogs_entry_id               FK finance_cogs_entries(id) nullable
 
         -- Rental line extras
         rental_start_date           date nullable
         rental_end_date             date nullable
+        rental_days                 int nullable
         deposit_amount              numeric(18,2) default 0
+        late_fee_per_day            numeric(18,2) default 0 -- snapshot from the item
+        reservation_id              FK inventory_reservations(id) nullable       -- [B8]
 
-        returned_quantity           numeric(18,2) default 0
+        returned_quantity           numeric(18,3) default 0
+        line_condition              enum('good','needs_cleaning','damaged','lost') nullable
         note                        text
-        created_at
-        updated_at
+        created_at / updated_at
+        -- CHECK: line_type='rental' requires rental_start_date and rental_end_date
 
 
     sales_order_payments
         id (PK)
         tenant_id                   FK tenants(id)
         sales_order_id              FK sales_orders(id)
-        payment_number              varchar(100) unique     -- PAY26-0001
+        payment_number              varchar(100)            -- PAY26-0001
         payment_type                enum('deposit','installment','full','refund','late_fee') default 'full'
+            -- 'deposit' → finance_customer_deposits, NOT income.             [C1]
         amount                      numeric(18,2) not null
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null
         payment_method_id           FK payment_methods(id)
-        finance_account_id          FK finance_accounts(id) -- cash drawer / bank
+        finance_account_id          FK finance_accounts(id)
+        finance_transaction_id      FK finance_transactions(id)   -- NEW · required  [E2]
+        customer_deposit_id         FK finance_customer_deposits(id) nullable
         paid_at                     timestamptz not null
-        reference_no                varchar(100)            -- receipt / transfer ref
+        business_date               date not null
+        reference_no                varchar(100)
         note                        text
-        created_by                  FK users(id)
-        created_at
+        status                      enum('posted','void') default 'posted'
+        reverses_id                 FK sales_order_payments(id) nullable
+        idempotency_key             uuid
+        created_by / created_at
+        -- unique (tenant_id, payment_number)
 
 
-    sales_returns
-        id (PK)
-        tenant_id                   FK tenants(id)
-        return_number               varchar(100) unique     -- RET26-0001
-        sales_order_id              FK sales_orders(id)
-        customer_id                 FK sales_customers(id)
+    sales_sale_returns                      -- renamed from sales_returns      [C7]
+        id (PK)                             -- refund + restock of SOLD goods only.
+        tenant_id                   FK tenants(id)          -- Rental returns are an
+        return_number               varchar(100)            -- order lifecycle transition,
+        sales_order_id              FK sales_orders(id)     -- NOT this document.
+        customer_id                 FK sales_customers(id) nullable
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
         return_date                 date not null
+        business_date               date not null
         reason                      enum('wrong_item','damaged','customer_change','other') default 'other'
         refund_amount               numeric(18,2) default 0
+        refund_amount_base          numeric(18,2) default 0
+        finance_account_id          FK finance_accounts(id)
+        finance_transaction_id      FK finance_transactions(id) nullable
         restock                     boolean default true
-        status                      enum('draft','posted','cancelled') default 'draft'
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK sales_sale_returns(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
         note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, return_number)
+        -- On post: refund OUT + reverse the COGS entry + stock_in if restock.
 
 
-    sales_return_items
+    sales_sale_return_items
         id (PK)
-        sales_return_id             FK sales_returns(id)
+        sales_return_id             FK sales_sale_returns(id)
         sales_order_item_id         FK sales_order_items(id)
         inventory_item_id           FK inventory_items(id)
-        quantity                    numeric(18,2) not null
+        quantity                    numeric(18,3) not null
         unit_price                  numeric(18,2) not null
         line_total                  numeric(18,2) not null
+        unit_cost_snapshot          numeric(18,2) default 0 -- restock cost = original WAC
         condition                   enum('good','damaged','unusable') default 'good'
         note                        text
+
+
+    sales_rental_claims                     -- NEW · damage / loss / late      [C5]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        claim_number                varchar(100)            -- CLM26-0001
+        sales_order_id              FK sales_orders(id)
+        sales_order_item_id         FK sales_order_items(id)
+        customer_id                 FK sales_customers(id)
+        inventory_item_id           FK inventory_items(id)
+        claim_type                  enum('damage','loss','late','cleaning') not null
+        claim_date                  date not null
+        business_date               date not null
+
+        assessed_amount             numeric(18,2) not null  -- what the customer owes
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        assessed_amount_base        numeric(18,2) not null
+
+        deposit_applied             numeric(18,2) default 0 -- consumed from the deposit
+        balance_to_receivable       numeric(18,2) default 0 -- remainder → finance_receivables
+        disposal_id                 FK inventory_disposals(id) nullable
+            -- for claim_type='loss': the dress is written off from stock
+        repair_note                 text
+        status                      enum('draft','posted','waived','void') default 'draft'
+        reverses_id                 FK sales_rental_claims(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, claim_number)
+        -- On post:
+        --   deposit_applied     → finance_customer_deposits.forfeited_amount → INCOME
+        --   balance_to_receivable → finance_receivables
+        --   claim_type='loss'   → inventory_disposals (dress written off at WAC)
+        --   claim_type='damage' → item lifecycle_status = 'repairing'

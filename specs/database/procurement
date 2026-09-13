@@ -1,10 +1,35 @@
-----------------------------------------------------------------------------------
-PROCUREMENT MODULE
-(simple purchasing — enough for correct stock cost + AP, not a full SCM suite)
+================================================================================
+BOMS — COMPLETE DATABASE SCHEMA  (v2 — corrected)
+Bridal Omnichannel Management System
+Modules: platform · finance-core · inventory · procurement · sales · finance-reporting
+================================================================================
+
+MODULE: PROCUREMENT  (extracted from specs/database/all — that file is authoritative)
+
+CONVENTIONS
+  • Every tenant-scoped table carries: tenant_id, created_by, updated_by,
+    created_at, updated_at.
+  • Every POSTING document additionally carries:
+        business_date   date not null     -- ADR-011
+        idempotency_key uuid              -- ADR-012, unique (tenant_id, key)
+        posted_by       FK users(id)
+        posted_at       timestamptz
+        voided_by       FK users(id)
+        voided_at       timestamptz
+        void_reason     varchar(255)
+        reverses_id     FK <same table>   -- set on the reversing document
+  • Every money-bearing row carries: currency_id, exchange_rate, amount_base
+    (tenant default currency, snapshotted at posting).                   [E8]
+  • Money numeric(18,2) · quantity numeric(18,3) · rate numeric(18,6).
+  • UI language / direction from tenants.default_language_id (en=ltr, fa=rtl,
+    ps=rtl). No per-page switcher. Create/edit forms are drawers
+    (LTR → right, RTL → left).
+
 ----------------------------------------------------------------------------------
 
-    -- Bridal shop needs: record supplier, buy dresses/accessories, receive into stock.
-    -- Skip complex RFQ / shipment / landed-cost flows from the old ERP reference.
+4. PROCUREMENT MODULE
+   (suppliers · purchase orders · receiving/GRN · supplier payments · returns)
+----------------------------------------------------------------------------------
 
 
     procurement_suppliers
@@ -16,106 +41,191 @@ PROCUREMENT MODULE
         phone                       varchar(50)
         email                       varchar(255)
         address                     text
+        city                        varchar(100)
+        country                     varchar(100)
         note                        text
         payment_term_id             FK payment_terms(id)
         currency_id                 FK currencies(id)
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, supplier_code)
+        -- index (tenant_id, phone)
 
 
     procurement_purchase_orders
         id (PK)
         tenant_id                   FK tenants(id)
-        po_number                   varchar(100) unique     -- PO26-000001
+        po_number                   varchar(100)            -- PO26-000012
         supplier_id                 FK procurement_suppliers(id)
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)       -- default receive warehouse
 
         order_date                  date not null
         expected_date               date nullable
+        business_date               date not null
 
         currency_id                 FK currencies(id)
-        exchange_rate               numeric(18,6) default 1
+        exchange_rate               numeric(18,6) default 1 -- snapshotted            [A3]
 
         subtotal                    numeric(18,2) default 0
         discount_amount             numeric(18,2) default 0
         tax_amount                  numeric(18,2) default 0
-        other_cost                  numeric(18,2) default 0 -- shipping / customs simple
+        other_cost                  numeric(18,2) default 0
+            -- shipping / customs. Allocated pro-rata to lines at RECEIPT time.  [D1]
         total_amount                numeric(18,2) default 0
-        paid_amount                 numeric(18,2) default 0
-        balance_amount              numeric(18,2) default 0 -- AP remaining
+        total_amount_base           numeric(18,2) default 0
 
-        payment_status              enum('unpaid','partial','paid') default 'unpaid'
-        status                      enum('draft','ordered','partial_received','received','cancelled') default 'draft'
+        cached_received_pct         numeric(5,2) default 0  -- display cache
+        cached_paid_amount          numeric(18,2) default 0 -- display cache
+        cached_balance_amount       numeric(18,2) default 0
+            -- DISPLAY CACHE ONLY. A/P truth = finance_payables.               [D4]
 
+        status                      enum('draft','ordered','partial_received',
+                                         'received','cancelled','void') default 'draft'
+        approved_by                 FK users(id) nullable   -- set on draft → ordered   [D8]
+        approved_at                 timestamptz
         note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        idempotency_key             uuid
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, po_number)                                      [A1]
+        -- Draft POs affect neither stock nor finance.
+        -- Only 'ordered' / 'partial_received' POs can be received.
 
 
     procurement_purchase_order_items
         id (PK)
+        tenant_id                   FK tenants(id)
         purchase_order_id           FK procurement_purchase_orders(id)
         inventory_item_id           FK inventory_items(id) nullable
-            -- null when buying a brand-new dress not yet created; create item on receive
-        item_name                   varchar(255) not null   -- snapshot / draft name
-        quantity_ordered            numeric(18,2) not null
-        quantity_received           numeric(18,2) default 0
+            -- null = a brand-new dress with no SKU yet. The GRN creates the
+            -- inventory_items row on post and WRITES THE ID BACK HERE.       [D2]
+        item_name                   varchar(255) not null   -- draft / snapshot name
+        item_spec_json              jsonb
+            -- captured on the PO for new items: size, colour, fabric, purpose,
+            -- category — used to pre-fill the item created at receipt.
+        quantity_ordered            numeric(18,3) not null
+        quantity_received           numeric(18,3) default 0
+            -- RECOMPUTED from receipts, never incremented in place.          [D3]
         unit_cost                   numeric(18,2) not null
-        other_cost                  numeric(18,2) default 0
+        line_other_cost             numeric(18,2) default 0
         line_total                  numeric(18,2) not null
         unit_id                     FK units(id)
+        over_receipt_approved_by    FK users(id) nullable                     -- [D3]
         note                        text
+        -- CHECK (quantity_received <= quantity_ordered
+        --        OR over_receipt_approved_by IS NOT NULL)
 
 
-    procurement_receipts
+    procurement_receipts                    -- GRN
         id (PK)
         tenant_id                   FK tenants(id)
-        receipt_number              varchar(100) unique     -- GRN26-0001
+        receipt_number              varchar(100)            -- GRN26-0008
         purchase_order_id           FK procurement_purchase_orders(id)
         supplier_id                 FK procurement_suppliers(id)
         branch_id                   FK branches(id)
         warehouse_id                FK warehouses(id)
         received_date               date not null
-        status                      enum('draft','posted','cancelled') default 'draft'
+        business_date               date not null
+
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        allocated_other_cost        numeric(18,2) default 0
+            -- the slice of the PO header other_cost carried by THIS receipt  [D1]
+
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK procurement_receipts(id) nullable      -- [D6]
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
         note                        text
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-        -- On post: create inventory_stock_transactions (stock_in) + update item cost
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, receipt_number)
+        -- ON POST (single DB transaction):
+        --   1. create inventory_items for free-text lines; write id back to
+        --      the PO line and onto the receipt line                         [D2]
+        --   2. allocate other_cost pro-rata by line value → landed_unit_cost [D1]
+        --   3. insert stock_in transactions at landed_unit_cost
+        --   4. recompute WAC in inventory_stock_balances                (ADR-001)
+        --   5. open / increase finance_payables                              [D4]
+        --   6. recompute PO quantity_received and status
+        -- VOID posts the exact reverse of steps 3–6.                    (ADR-005)
 
 
     procurement_receipt_items
         id (PK)
+        tenant_id                   FK tenants(id)
         receipt_id                  FK procurement_receipts(id)
         purchase_order_item_id      FK procurement_purchase_order_items(id)
         inventory_item_id           FK inventory_items(id)
-        quantity_received           numeric(18,2) not null
-        unit_cost                   numeric(18,2) not null
-        other_cost                  numeric(18,2) default 0
+            -- populated during posting for lines that create a new item      [D2]
+        quantity_received           numeric(18,3) not null
+        unit_cost                   numeric(18,2) not null      -- from the PO line
+        allocated_other_cost        numeric(18,2) default 0     -- pro-rata by line value
+        landed_unit_cost            numeric(18,2) not null
+            -- = unit_cost + (allocated_other_cost + line_other_cost) / quantity_received
+            -- THE ONLY cost that reaches inventory. Stored so it is auditable. [D1]
+        line_value_base             numeric(18,2) default 0
         note                        text
 
 
     procurement_supplier_payments
         id (PK)
         tenant_id                   FK tenants(id)
-        payment_number              varchar(100) unique     -- SPAY26-0001
+        payment_number              varchar(100)            -- SPAY26-0001
         supplier_id                 FK procurement_suppliers(id)
         purchase_order_id           FK procurement_purchase_orders(id) nullable
+        payable_id                  FK finance_payables(id) nullable
         amount                      numeric(18,2) not null
         currency_id                 FK currencies(id)
         exchange_rate               numeric(18,6) default 1
+        amount_base                 numeric(18,2) not null
         payment_method_id           FK payment_methods(id)
         finance_account_id          FK finance_accounts(id)
+        finance_transaction_id      FK finance_transactions(id)   -- NEW · required  [E2]
         paid_at                     timestamptz not null
+        business_date               date not null
         reference_no                varchar(100)
         note                        text
-        created_by                  FK users(id)
-        created_at
-        -- On create: reduce PO balance + create finance expense/AP settlement
+        status                      enum('posted','void') default 'posted'
+        reverses_id                 FK procurement_supplier_payments(id) nullable
+        idempotency_key             uuid
+        created_by / created_at
+        -- unique (tenant_id, payment_number)
+        -- On post: finance_transactions OUT + reduce finance_payables balance.
+
+
+    procurement_returns                     -- NEW · supplier debit note       [D7]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        return_number               varchar(100)            -- PRET26-0001
+        supplier_id                 FK procurement_suppliers(id)
+        purchase_order_id           FK procurement_purchase_orders(id) nullable
+        receipt_id                  FK procurement_receipts(id) nullable
+        branch_id                   FK branches(id)
+        warehouse_id                FK warehouses(id)
+        return_date                 date not null
+        business_date               date not null
+        reason                      enum('damaged','wrong_item','quality','other') default 'damaged'
+        currency_id                 FK currencies(id)
+        exchange_rate               numeric(18,6) default 1
+        total_amount                numeric(18,2) default 0
+        total_amount_base           numeric(18,2) default 0
+        settlement                  enum('reduce_payable','refund','credit_note') default 'reduce_payable'
+        status                      enum('draft','posted','void') default 'draft'
+        reverses_id                 FK procurement_returns(id) nullable
+        idempotency_key             uuid
+        posted_by / posted_at / voided_by / voided_at / void_reason
+        note                        text
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, return_number)
+        -- On post: stock_out at WAC + reduce finance_payables (or refund IN).
+
+
+    procurement_return_items
+        id (PK)
+        return_id                   FK procurement_returns(id)
+        receipt_item_id             FK procurement_receipt_items(id) nullable
+        inventory_item_id           FK inventory_items(id)
+        quantity                    numeric(18,3) not null
+        unit_cost                   numeric(18,2) not null
+        line_total                  numeric(18,2) not null
+        note                        text

@@ -1,27 +1,50 @@
-----------------------------------------------------------------------------------
-PLATFORM MODULE
-(common / tenant / auth / master data used by all modules)
+================================================================================
+BOMS — COMPLETE DATABASE SCHEMA  (v2 — corrected)
+Bridal Omnichannel Management System
+Modules: platform · finance-core · inventory · procurement · sales · finance-reporting
+================================================================================
+
+MODULE: PLATFORM  (extracted from specs/database/all — that file is authoritative)
+
+CONVENTIONS
+  • Every tenant-scoped table carries: tenant_id, created_by, updated_by,
+    created_at, updated_at.
+  • Every POSTING document additionally carries:
+        business_date   date not null     -- ADR-011
+        idempotency_key uuid              -- ADR-012, unique (tenant_id, key)
+        posted_by       FK users(id)
+        posted_at       timestamptz
+        voided_by       FK users(id)
+        voided_at       timestamptz
+        void_reason     varchar(255)
+        reverses_id     FK <same table>   -- set on the reversing document
+  • Every money-bearing row carries: currency_id, exchange_rate, amount_base
+    (tenant default currency, snapshotted at posting).                   [E8]
+  • Money numeric(18,2) · quantity numeric(18,3) · rate numeric(18,6).
+  • UI language / direction from tenants.default_language_id (en=ltr, fa=rtl,
+    ps=rtl). No per-page switcher. Create/edit forms are drawers
+    (LTR → right, RTL → left).
+
 ----------------------------------------------------------------------------------
 
-    -- Common audit columns on tenant-scoped tables:
-    -- tenant_id, created_by, updated_by, created_at, updated_at
-    -- UI language / RTL-LTR: driven by tenants.default_language_id (en=ltr, fa=rtl, ps=rtl).
-    -- No per-page language switcher. Create/edit forms open in a drawer (LTR→right, RTL→left).
+1. PLATFORM MODULE
+   (tenant · auth · RBAC · structure · master data · infrastructure)
+----------------------------------------------------------------------------------
 
 
     tenants
         id (PK)
-        code                        varchar(20) unique   -- e.g. ADF (used in SKU prefix)
+        code                        varchar(20) unique   -- ADF — used in SKU prefix
         name                        varchar(255) not null
         type                        enum('shop','mall','boutique','other') default 'shop'
         phone                       varchar(50)
         email                       varchar(255)
         website_url                 varchar(255)
         logo_path                   varchar(255)
-        city                        varchar(100)         -- select city first in forms
-        address                     text                 -- street / building textarea after city
-        default_currency_id         FK currencies(id)    -- separate field (not combined)
-        default_language_id         FK languages(id)     -- en | fa (Dari) | ps (Pashto)
+        city                        varchar(100)         -- city select, then address
+        address                     text
+        default_currency_id         FK currencies(id)    -- separate field
+        default_language_id         FK languages(id)     -- separate field: en | fa | ps
         timezone                    varchar(50) default 'Asia/Kabul'  -- separate field
         status                      enum('active','inactive','suspended') default 'active'
         created_at
@@ -34,50 +57,52 @@ PLATFORM MODULE
         name                        varchar(50)          -- English, Dari, Pashto
         native_name                 varchar(50)          -- English, دری, پښتو
         direction                   enum('ltr','rtl') default 'ltr'
-            -- en → ltr ; fa (Dari) → rtl ; ps (Pashto) → rtl
         status                      enum('active','inactive') default 'active'
-        -- Seeded system locales only: English, Dari, Pashto
+        -- Seeded system locales only.
 
 
     users
         id (PK)
-        tenant_id                   FK tenants(id) not null  -- always tenant-bound
+        tenant_id                   FK tenants(id) not null
         name                        varchar(255) not null
         email                       varchar(255) not null
         phone                       varchar(50)
         password_hash               varchar(255) not null
         avatar_path                 varchar(255)
-        branch_id                   FK branches(id) nullable   -- home / default branch
+        branch_id                   FK branches(id) nullable   -- home branch
         last_login_at               timestamptz
         status                      enum('active','inactive') default 'active'
-            -- No invite status / invite flow. Users are created directly inside a tenant.
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
-        -- unique (tenant_id, email)
-        -- UI language follows tenant.default_language_id (not a user preference field)
+        created_by / updated_by / created_at / updated_at
+        -- unique (email)   ← GLOBAL. Login has no tenant context.           [A8]
+        -- unique (phone) where phone is not null   ← GLOBAL, same reason.
+        -- No invite flow, no invite token, no 'invited' status.
+        -- UI language follows tenants.default_language_id, not a user field.
 
 
     roles
         id (PK)
-        tenant_id                   FK tenants(id) nullable  -- null = system role template
+        tenant_id                   FK tenants(id) nullable  -- null = SYSTEM TEMPLATE
         code                        varchar(50)              -- owner, manager, cashier, staff
         name                        varchar(100)
         description                 text
         is_system                   boolean default false
+        copied_from_role_id         FK roles(id) nullable    -- template it was cloned from
         status                      enum('active','inactive') default 'active'
-        created_at
-        updated_at
+        created_at / updated_at
+        -- unique (tenant_id, code)
+        -- Templates (tenant_id null) are READ-ONLY outside seeding. On tenant
+        -- creation each template is COPIED into a tenant-owned role so one
+        -- tenant's edits cannot affect another's.                           [A7]
 
 
     permissions
         id (PK)
         code                        varchar(100) unique      -- inventory.items.create
-        module                      varchar(50)              -- platform, inventory, sales, procurement, finance
-        action                      varchar(50)              -- view, create, edit, void, export, approve
+        module                      varchar(50)              -- platform|inventory|sales|procurement|finance|reports
+        action                      varchar(50)              -- view|create|edit|post|void|export|approve
         name                        varchar(150)
         description                 text
+        -- Seeded, never tenant-owned. Full seed list in specs/features/01-platform.md.  [F5]
 
 
     role_permissions
@@ -92,9 +117,12 @@ PLATFORM MODULE
         tenant_id                   FK tenants(id) not null
         user_id                     FK users(id)
         role_id                     FK roles(id)
-        branch_id                   FK branches(id) nullable -- role scoped to branch if needed
-        -- unique (user_id, role_id, branch_id)
-        -- One user may have many roles (multi-select on create/edit user)
+        branch_id                   FK branches(id) nullable -- null = tenant-wide
+        -- unique (user_id, role_id, coalesce(branch_id, 0))                 [A6]
+        -- A user may hold many roles; effective permissions = union.
+        -- Branch scoping: if EVERY role row for a user carries a branch_id,
+        -- all list queries are filtered to that branch set. A role row with
+        -- branch_id null grants tenant-wide visibility.                     [A12]
 
 
     branches
@@ -107,27 +135,20 @@ PLATFORM MODULE
         address                     text
         is_main                     boolean default false
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
         -- unique (tenant_id, code)
 
 
     warehouses
         id (PK)
         tenant_id                   FK tenants(id)
-        branch_id                   FK branches(id)
+        branch_id                   FK branches(id) not null  -- exactly one branch
         code                        varchar(20)
         name                        varchar(255) not null
         location                    varchar(255)
-        capacity                    numeric(18,2) nullable
-        is_default                  boolean default false
+        is_default                  boolean default false     -- one default per branch
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
         -- unique (tenant_id, code)
 
 
@@ -139,24 +160,32 @@ PLATFORM MODULE
         symbol                      varchar(10)
         decimal_places              int default 2
         is_default                  boolean default false
-        exchange_rate_to_default    numeric(18,6) default 1  -- vs tenant default currency
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
+        -- NOTE: the live rate lives in platform_exchange_rates, NOT here.   [A3]
+
+
+    platform_exchange_rates                                   -- NEW            [A3]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        currency_id                 FK currencies(id)
+        rate_to_default             numeric(18,6) not null
+        effective_from              date not null
+        created_by / created_at
+        -- unique (tenant_id, currency_id, effective_from)
+        -- Documents ALWAYS snapshot the rate they used. This table only
+        -- supplies the default for a new document and powers rate history.
 
 
     units
         id (PK)
         tenant_id                   FK tenants(id) nullable
-        code                        varchar(20)              -- pcs, box, set
-        name                        varchar(100)             -- Piece, Box, Set
+        code                        varchar(20)              -- pcs, set, box
+        name                        varchar(100)
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
 
 
     payment_methods
@@ -165,10 +194,8 @@ PLATFORM MODULE
         code                        varchar(30)              -- cash, card, transfer, wallet
         name                        varchar(100)
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
 
 
     payment_terms
@@ -179,31 +206,81 @@ PLATFORM MODULE
         days                        int default 0
         deposit_percent             numeric(5,2) default 0
         status                      enum('active','inactive') default 'active'
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
-        created_at
-        updated_at
+        created_by / updated_by / created_at / updated_at
+        -- unique (tenant_id, code)
 
 
     tenant_settings
         id (PK)
         tenant_id                   FK tenants(id) unique
         business_type               enum('bridal_rental','bridal_sale','bridal_mixed') default 'bridal_mixed'
-        sku_prefix                  varchar(20)              -- usually tenant.code
+        sku_prefix                  varchar(20)              -- usually tenants.code
+
+        -- Inventory policy
         allow_negative_stock        boolean default false
+            -- false → hard block at checkout with an inline error
+            -- true  → allow, flag the line, surface in the Negative Stock report   [B10]
+        low_stock_alert             boolean default true
+        costing_method              enum('wac') default 'wac'   -- ADR-001; FIFO reserved for v2
+
+        -- Rental policy
         rental_default_days         int default 3
         rental_deposit_percent      numeric(5,2) default 30
-        low_stock_alert             boolean default true
+        rental_buffer_days          int default 2            -- cleaning turnaround    [B7]
+        default_expected_rental_uses int default 20          -- ADR-002 divisor
+        rental_cost_method          enum('per_use','none','straight_line') default 'per_use'
+
+        -- Accounting policy
+        day_cutoff_time             time default '00:00'     -- business day boundary  [A11]
+
+        -- UI
         date_format                 varchar(30) default 'YYYY-MM-DD'
         mobile_nav_style            enum('bottom_tabs','drawer') default 'bottom_tabs'
         form_drawer_side            enum('auto','start','end') default 'auto'
-            -- auto = end in LTR (right), start in RTL (left) based on language direction
-        custom_json                 jsonb                    -- extra UI / feature flags
-        created_by                  FK users(id)
-        updated_by                  FK users(id)
+            -- auto = right in LTR, left in RTL
+        custom_json                 jsonb                    -- UI preferences only    [F1]
+        created_by / updated_by / created_at / updated_at
+
+
+    platform_sequences                                        -- NEW            [A2]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        doc_type                    varchar(20)   -- SKU|TRN|MSE|ADJ|DSP|TRF|SO|PAY|RET|CLM|PO|GRN|SPAY|PRET|FIN|EXP|INC|AP|AR|FTR|DEP|COGS
+        period_key                  varchar(10)   -- '26' (year) or '2609' (year-month)
+        last_value                  bigint default 0
+        -- unique (tenant_id, doc_type, period_key)
+        -- Atomic: UPDATE … SET last_value = last_value + 1 RETURNING last_value.
+        -- Format: {PREFIX}{period}-{zero-padded}  →  SO26-000019
+
+
+    platform_attachments                                      -- NEW            [A10]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        entity_type                 varchar(50)   -- inventory_adjustment, finance_expense, …
+        entity_id                   bigint
+        file_path                   varchar(255) not null
+        caption                     varchar(255)
+        mime_type                   varchar(100)
+        size_bytes                  bigint
+        sort_order                  int default 0
+        created_by / created_at
+        -- index (tenant_id, entity_type, entity_id)
+
+
+    platform_notifications                                    -- NEW            [F3]
+        id (PK)
+        tenant_id                   FK tenants(id)
+        user_id                     FK users(id) nullable     -- null = all users in tenant
+        kind                        enum('low_stock','due_return','overdue_return',
+                                         'overdue_ar','due_ap','reconcile_mismatch','other')
+        title                       varchar(255)
+        body                        text
+        entity_type                 varchar(50)
+        entity_id                   bigint
+        severity                    enum('info','warning','critical') default 'info'
+        read_at                     timestamptz
         created_at
-        updated_at
-        -- timezone lives on tenants.timezone (shown as its own field on tenant form)
+        -- index (tenant_id, user_id, read_at)
 
 
     audit_logs
@@ -211,10 +288,14 @@ PLATFORM MODULE
         tenant_id                   FK tenants(id)
         user_id                     FK users(id)
         module                      varchar(50)
-        action                      varchar(50)              -- create, update, delete, login, export
+        action                      varchar(50)   -- create|update|post|void|delete|login|export|approve
         entity_type                 varchar(50)
-        entity_id                   int nullable
+        entity_id                   bigint nullable
         summary                     varchar(255)
-        meta                        jsonb
+        before_json                 jsonb
+        after_json                  jsonb
         ip_address                  varchar(45)
         created_at
+        -- MANDATORY audit events: every post, every void, permission changes,
+        -- price changes, tenant setting changes, login/logout.              [F4]
+        -- index (tenant_id, entity_type, entity_id), (tenant_id, created_at)

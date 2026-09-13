@@ -1,37 +1,52 @@
 # Wireframe conventions (BOMS Excalidraw)
 
+Canonical reference: [`specs/wireframes/README.md`](../../specs/wireframes/README.md)
+
+## Generator
+
+```bash
+python3 .agent/scripts/wireframes/build.py
+```
+
+```
+.agent/scripts/wireframes/
+  dsl.py        tokens, primitives, components, phone_shell / desk_shell / sidebar
+  build.py      writes all boards incl. the combined 00-All-Modules
+  modules/      overview · platform · inventory · procurement · sales · finance
+```
+
+Each module exposes `desktop()` and `mobile()` returning flat element lists.
+Never hand-edit `.excalidraw` JSON — the build overwrites it.
+
 ## Layout
 
-### Mobile (`specs/wireframes/mobile/`)
-- Screens flow **left → right** in page order.
-- Each screen is a **phone frame** ~375×812.
-- Bottom tab nav: Home · Inventory · Sales · More.
+- Desktop: 1440×900 frames, 248px icon sidebar, 4 per row
+- Mobile: 390×844 frames, bottom tabs, 5–6 per row
+- `grid_pos(i, cols)` places frames; `flow_arrows()` links them
+- `section_label()` names each grid row
 
-### Desktop (`specs/wireframes/desktop/`)
-- Screens flow **left → right** in page order.
-- Each screen is a **browser window** ~1280×800.
-- Left sidebar nav (except Auth): Home · Inventory · Sales · Procurement · Finance · Settings.
-- Content uses tables, KPI cards, and split panels (cashier-friendly).
+## UX rules
 
-## Modules → files (both folders)
+- **Invite feature removed** — users are created directly inside a tenant
+- **Create/edit forms are drawers** — right in LTR, **left in RTL**
+- **Language is a tenant setting** (English · Dari · Pashto); no per-page switcher
+- Dari & Pashto → whole UI RTL; numbers, SKUs, dates stay LTR
+- Tenant form: Currency · Language · Timezone as three fields; City then Address
+- Posted documents offer **Void**, never Edit
+- Every screen carries a `note()` naming the tables it reads and writes
 
-| File | Screens |
-|------|---------|
-| `01-Auth.excalidraw` | Login, Forgot, Users (tenant-bound), multi-role create drawer, Roles, permission matrix |
-| `02-Platform-Settings.excalidraw` | Settings hub, Tenants drawer (currency/language/TZ separate; city→address), Branches, Master data, Locale RTL/LTR |
-| `03-Inventory.excalidraw` | Hub/valuation, List, Detail, Stock entry (PO+manual), Adjust, Dispose, Transfer, Reserve, Ledger, Reports |
-| `04-Sales.excalidraw` | Home, Sale, Rental, Order/Return |
-| `05-Procurement.excalidraw` | Home, Suppliers, PO, Receive/Pay |
-| `06-Finance.excalidraw` | 5 pillars, cash/expense/AP/AR, P&L |
+## Data model to draw
 
-## UX rules (all modules)
+Always the corrected model — see `specs/review/02-decisions.md`:
 
-- **Invite feature removed** — users are created directly inside a tenant.
-- **Create/edit forms = drawers** — open from **right in LTR**, **left in RTL**.
-- **Language** = tenant setting only (English / Dari / Pashto). No per-page language switcher.
-- Dari & Pashto → whole UI **RTL**; English → **LTR**.
-- Tenant form: **Currency · Language · Timezone** as three fields; **City** then **Address** textarea.
+- `owned = on_hand + on_rent`; valuation uses owned
+- Reservations are not ledger rows (no reserve/release types)
+- Weighted average cost per (item, warehouse)
+- Deposits are a liability, never income
+- Rental amortisation is its own COGS line
+- Landed cost is visible on receipts
 
 ## Agent rule
 
-Do **not** Read full `.excalidraw` into main agent context. Use the excalidraw skill (subagent) or regenerate via `scripts/generate_wireframes.py`.
+Do **not** read full `.excalidraw` files into context — they are megabytes of JSON.
+Read the Python module instead, or regenerate.
