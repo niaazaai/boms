@@ -1,0 +1,76 @@
+{
+  "fonts": {
+    "latin": "Inter, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    "rtl": "Vazirmatn, 'Noto Naskh Arabic', Tahoma, sans-serif",
+    "mono": "'JetBrains Mono', 'SF Mono', Menlo, monospace"
+  },
+  "note": "Dari and Pashto are set in Vazirmatn \u2014 it carries the four-eye heh, the Persian kaf and yeh, and Pashto's \u069a \u0681 \u067c. Numbers, SKUs, barcodes, money and dates stay left-to-right inside right-to-left text.",
+  "scale": {
+    "display": {
+      "size": 28,
+      "line": 34,
+      "weight": 650,
+      "tracking": -0.4
+    },
+    "h1": {
+      "size": 24,
+      "line": 30,
+      "weight": 650,
+      "tracking": -0.3
+    },
+    "h2": {
+      "size": 20,
+      "line": 26,
+      "weight": 620,
+      "tracking": -0.2
+    },
+    "h3": {
+      "size": 16,
+      "line": 22,
+      "weight": 600,
+      "tracking": -0.1
+    },
+    "body": {
+      "size": 14,
+      "line": 20,
+      "weight": 400,
+      "tracking": 0.0
+    },
+    "body_medium": {
+      "size": 14,
+      "line": 20,
+      "weight": 540,
+      "tracking": 0.0
+    },
+    "small": {
+      "size": 13,
+      "line": 18,
+      "weight": 400,
+      "tracking": 0.0
+    },
+    "caption": {
+      "size": 12,
+      "line": 16,
+      "weight": 400,
+      "tracking": 0.0
+    },
+    "label": {
+      "size": 12,
+      "line": 16,
+      "weight": 540,
+      "tracking": 0.0
+    },
+    "micro": {
+      "size": 11,
+      "line": 14,
+      "weight": 600,
+      "tracking": 0.6
+    },
+    "numeric": {
+      "size": 24,
+      "line": 28,
+      "weight": 620,
+      "tracking": -0.4
+    }
+  }
+}

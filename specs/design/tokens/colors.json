@@ -1,0 +1,137 @@
+{
+  "source": "dd/Customer Management - AL DUBAI Admin.svg",
+  "semantic": {
+    "bg": "#FBF9F6",
+    "sidebar": "#F5F3F0",
+    "surface": "#FFFFFF",
+    "surface_2": "#F5F3F0",
+    "input": "#FBF9F6",
+    "border": "#E8E4DF",
+    "divider": "#EAE8E5",
+    "ink": "#1B1C1A",
+    "body": "#4F4440",
+    "muted": "#6B6B6B",
+    "disabled": "#9CA3AF",
+    "primary": "#73594D",
+    "primary_press": "#553D32",
+    "primary_fg": "#FFFFFF",
+    "primary_soft": "#F0EAE6",
+    "accent": "#FFDDB7",
+    "accent_2": "#FED6A8",
+    "accent_ink": "#2A1800",
+    "tan": "#C9A89A",
+    "bronze": "#795B36",
+    "success": "#4A7C59",
+    "success_bg": "#EDF3EF",
+    "danger": "#B54A4A",
+    "danger_bg": "#F7ECEC",
+    "warning": "#C4A035",
+    "warning_bg": "#FBF4E3",
+    "info": "#73594D",
+    "info_bg": "#F0EAE6"
+  },
+  "status": {
+    "active": {
+      "fg": "#4A7C59",
+      "bg": "#EDF3EF"
+    },
+    "available": {
+      "fg": "#4A7C59",
+      "bg": "#EDF3EF"
+    },
+    "completed": {
+      "fg": "#4A7C59",
+      "bg": "#EDF3EF"
+    },
+    "fulfilled": {
+      "fg": "#6B6B6B",
+      "bg": "#F5F3F0"
+    },
+    "returned": {
+      "fg": "#4A7C59",
+      "bg": "#EDF3EF"
+    },
+    "on rent": {
+      "fg": "#795B36",
+      "bg": "#FBF4E3"
+    },
+    "reserved": {
+      "fg": "#C4A035",
+      "bg": "#FBF4E3"
+    },
+    "in transit": {
+      "fg": "#795B36",
+      "bg": "#FBF4E3"
+    },
+    "partial": {
+      "fg": "#C4A035",
+      "bg": "#FBF4E3"
+    },
+    "repairing": {
+      "fg": "#C4A035",
+      "bg": "#FBF4E3"
+    },
+    "low stock": {
+      "fg": "#B54A4A",
+      "bg": "#F7ECEC"
+    },
+    "conflict": {
+      "fg": "#B54A4A",
+      "bg": "#F7ECEC"
+    },
+    "disposed": {
+      "fg": "#B54A4A",
+      "bg": "#F7ECEC"
+    },
+    "discontinued": {
+      "fg": "#6B6B6B",
+      "bg": "#F5F3F0"
+    },
+    "draft": {
+      "fg": "#6B6B6B",
+      "bg": "#F5F3F0"
+    },
+    "released": {
+      "fg": "#6B6B6B",
+      "bg": "#F5F3F0"
+    },
+    "cancelled": {
+      "fg": "#6B6B6B",
+      "bg": "#F5F3F0"
+    }
+  },
+  "raw": {
+    "#FBF9F6": "page background, and the fill of input controls",
+    "#F5F3F0": "the 288px sidebar, and stat tiles on the page",
+    "#FFFFFF": "cards and tables",
+    "#E8E4DF": "card borders",
+    "#EAE8E5": "dividers and icon buttons",
+    "#1B1C1A": "headings",
+    "#4F4440": "body copy and icons",
+    "#6B6B6B": "secondary / helper text",
+    "#73594D": "primary button fill (pill), brand marks",
+    "#553D32": "primary pressed",
+    "#FFDDB7": "active sidebar item",
+    "#FED6A8": "warning surface",
+    "#2A1800": "text on the peach surfaces",
+    "#C9A89A": "tan chip",
+    "#4A7C59": "success",
+    "#B54A4A": "danger",
+    "#C4A035": "gold / caution",
+    "#795B36": "bronze",
+    "#9CA3AF": "disabled"
+  },
+  "radius": {
+    "card": 16,
+    "control": 12,
+    "tile": 12,
+    "pill": 999,
+    "chip": 999,
+    "sm": 8
+  },
+  "shadow": {
+    "card": "0 1px 2px rgba(27,28,26,0.04), 0 8px 24px rgba(27,28,26,0.05)",
+    "drawer": "-24px 0 48px rgba(27,28,26,0.12)",
+    "pop": "0 12px 32px rgba(27,28,26,0.14)"
+  }
+}
