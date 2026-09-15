@@ -4,20 +4,28 @@
 
 Trigger when creating/editing `*.excalidraw` or discussing wireframe diagrams.
 
-- Prefer regenerate via `.agent/scripts/generate_wireframes.py` for full module redraws.
-- For small edits, delegate a **subagent** (excalidraw skill) — never load raw JSON in main chat.
+- Prefer regenerating: `python3 .agent/scripts/wireframes/build.py`.
+- For small edits, delegate to a **subagent** — never load raw `.excalidraw`
+  JSON into the main chat; the Inventory board alone is ~5,000 elements.
+- Conventions: [`wireframe-conventions.md`](./wireframe-conventions.md).
 
 ## ui-ux-pro-max
 
-Trigger before polished UI implementation (not required for low-fi wireframes).
+Trigger before polished UI work (not needed for low-fidelity wireframes).
 
-- Search styles / colors / typography for bridal retail, mobile-first POS.
-- Avoid generic purple gradients / Inter-only stacks when building real UI later.
+- The palette is already decided and measured —
+  [`design-tokens.md`](./design-tokens.md). Use the skill for interaction and
+  layout judgement, not to pick colours.
+- Never introduce a blue or violet: the finished design is a warm neutral
+  palette taken from the client's own brand screens.
 
 ## graphify
 
-Trigger when mapping module dependencies, schema relationships, or codebase structure after code exists.
+Trigger when mapping module dependencies, schema relationships, or codebase
+structure once code exists.
 
 ## playwright-cli
 
-Trigger when verifying running UI (screenshots, flows) after implementation — not needed for wireframe generation.
+Trigger when verifying a running UI (screenshots, flows) after implementation.
+Not needed for wireframe or design generation — those render with
+`qlmanage -t` on macOS.

@@ -287,7 +287,7 @@ def _d5(ox, oy):
                  G, row_h=42, widths=[0.7, 1.2, 1.2, 0.9, 1.1])
     els += e
     de, fx, fy, fw = drawer(cx, cy - 20, cw, ch, "Add expense", "right", 460,
-                            "Drawer opens from the right in LTR, left in RTL", G)
+                            "Drawer opens from the right in English, left in Dari and Pashto", G)
     els += de
     els += _lab(fx, fy, "RECENT CATEGORIES — TAP TO FILL", G)
     els += filter_chips(fx, fy + 20, ["Dry cleaning", "Transport", "Salaries"], 0, G)

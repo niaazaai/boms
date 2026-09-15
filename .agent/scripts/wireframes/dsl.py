@@ -7,6 +7,8 @@ placed on a grid via `grid_pos()`. Nothing here knows about BOMS content.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import random
 import string
@@ -65,6 +67,7 @@ ICON = {
     "chart": "📈", "down": "▾", "check": "✓", "cross": "✕", "filter": "☰",
     "export": "⬇", "print": "🖨", "photo": "🖼", "star": "⭐", "clock": "🕑",
     "warehouse": "🏚", "money_in": "↘", "money_out": "↗", "back": "←",
+    "sort": "↕", "scan": "▣",
 }
 
 
@@ -103,9 +106,25 @@ def line(x, y, w, color=HAIRLINE, g=None):
     return el
 
 
+def _measure(s: str, size: float) -> float:
+    """Rough advance width. Emoji and Perso-Arabic glyphs are much wider than
+    Latin, and the estimate matters: `mirror()` reflects an element by its box,
+    so an under-measured emoji lands on top of the label beside it."""
+    w = 0.0
+    for ch in s:
+        o = ord(ch)
+        if o > 0x1F000 or 0x2190 <= o <= 0x2BFF:      # emoji, arrows, symbols
+            w += 1.25
+        elif 0x0600 <= o <= 0x06FF:                    # Perso-Arabic
+            w += 0.62
+        else:
+            w += 0.56
+    return w * size
+
+
 def text(x, y, content, size=14, color=INK, align="left", width=None, g=None):
     lines = content.split("\n")
-    tw = width if width is not None else max(8.0, max(len(L) for L in lines) * size * 0.56)
+    tw = width if width is not None else max(8.0, max(_measure(L, size) for L in lines))
     el = base("text", x, y, tw, size * 1.25 * len(lines),
               strokeColor=color, roundness=None, groupIds=g or [])
     el.update({
@@ -113,6 +132,17 @@ def text(x, y, content, size=14, color=INK, align="left", width=None, g=None):
         "textAlign": align, "verticalAlign": "top", "containerId": None,
         "originalText": content, "autoResize": True, "lineHeight": 1.25,
     })
+    if width is None:
+        # Remember that this box was measured, not specified — i18n re-measures
+        # it after substitution so a longer Dari string does not overlap.
+        el["customData"] = {"auto": True}
+    return el
+
+
+def vrule(x, y, h, color=HAIRLINE, g=None):
+    """Vertical hairline divider."""
+    el = base("line", x, y, 0, h, strokeColor=color, roundness=None, groupIds=g or [])
+    el["points"] = [[0, 0], [0, h]]
     return el
 
 
@@ -252,16 +282,129 @@ def breadcrumb(x, y, parts, g=None):
 
 
 def note(x, y, w, content, color=ACCENT, g=None):
-    """Spec annotation box — explains what the screen does to the data."""
+    """Spec annotation box — explains what the screen does to the data.
+
+    Notes are developer annotations, not UI: they name real tables, columns and
+    SQL. They are tagged `spec` so the localised boards leave them in English —
+    translating `inventory_stock_transactions` would help nobody.
+    """
     g = g or []
     bgmap = {ACCENT: ACCENT_BG, WARN: WARN_BG, DANGER: DANGER_BG, INFO: INFO_BG, VIOLET: VIOLET_BG}
     rows = content.count("\n") + 1
     h = 20 + rows * 17
+    body = text(x + 12, y + 10, content, 12, color, width=w - 24, g=g)
+    body["customData"] = {"spec": True}
     return [
         rect(x, y, w, h, strokeColor=color, backgroundColor=bgmap.get(color, ACCENT_BG),
              strokeWidth=1, groupIds=g),
-        text(x + 12, y + 10, content, 12, color, width=w - 24, g=g),
+        body,
     ]
+
+
+# ── Barcode & QR ──────────────────────────────────────────────────
+#
+# Both are DERIVED from the SKU — nothing here is ever typed by a user.
+#   barcode  = Code128-B encoding of inventory_items.sku
+#   qr       = QR (ECC-M) whose payload is the same SKU
+# The drawings are schematic: real bar widths / modules come from the encoder
+# at render time. What the wireframe fixes is the SIZE, the caption and the
+# placement, so the printed label and the on-screen profile agree.
+
+
+def _bits(payload: str, n: int):
+    """Deterministic bit stream for a payload — same SKU always draws the same."""
+    out, buf = [], b""
+    i = 0
+    while len(out) < n:
+        buf = hashlib.sha256(payload.encode() + str(i).encode()).digest()
+        for byte in buf:
+            for k in range(8):
+                out.append((byte >> k) & 1)
+        i += 1
+    return out[:n]
+
+
+def barcode(x, y, w, h, code, g=None, caption=True, symbology="Code 128"):
+    """Code-128 barcode drawn from `code`. Returns (elements, next_y)."""
+    g = g or []
+    els = [rect(x, y, w, h, strokeColor=BG, backgroundColor=BG, strokeWidth=0, groupIds=g)]
+    pad = 10.0
+    inner_w = w - pad * 2
+    bar_h = h - (22 if caption else 6)
+    bits = _bits(code, 120)
+    # quiet zone · start guard · data · stop guard
+    pattern = [2, 1, 1, 2] + [1 + (b * 2) for b in bits] + [2, 3, 2]
+    unit = inner_w / float(sum(pattern))
+    xx = x + pad
+    for i, width_units in enumerate(pattern):
+        bw = width_units * unit
+        if i % 2 == 0:                                   # bar
+            els.append(rect(xx, y + 4, max(0.8, bw), bar_h,
+                            strokeColor=INK, backgroundColor=INK, strokeWidth=0, groupIds=g))
+        xx += bw
+    if caption:
+        els.append(text(x, y + h - 16, code, 12, INK, "center", w, g))
+    return els, y + h + 4
+
+
+def qr(x, y, size, payload, g=None, caption=None, modules=21):
+    """QR code (schematic, 21×21 = version 1) whose payload is `payload`."""
+    g = g or []
+    els = [rect(x, y, size, size, strokeColor=BG, backgroundColor=BG, strokeWidth=0, groupIds=g)]
+    quiet = size * 0.08
+    grid = size - quiet * 2
+    m = grid / modules
+    bits = _bits(payload, modules * modules)
+
+    def finder(fx, fy):
+        out = [rect(fx, fy, m * 7, m * 7, strokeColor=INK, backgroundColor=INK,
+                    strokeWidth=0, roundness=None, groupIds=g),
+               rect(fx + m, fy + m, m * 5, m * 5, strokeColor=BG, backgroundColor=BG,
+                    strokeWidth=0, roundness=None, groupIds=g),
+               rect(fx + m * 2, fy + m * 2, m * 3, m * 3, strokeColor=INK,
+                    backgroundColor=INK, strokeWidth=0, roundness=None, groupIds=g)]
+        return out
+
+    reserved = set()
+    for r in range(8):
+        for c in range(8):
+            reserved |= {(r, c), (r, modules - 1 - c), (modules - 1 - r, c)}
+    for r in range(modules):
+        for c in range(modules):
+            if (r, c) in reserved:
+                continue
+            if bits[r * modules + c]:
+                els.append(rect(x + quiet + c * m, y + quiet + r * m, m, m,
+                                strokeColor=INK, backgroundColor=INK, strokeWidth=0,
+                                roundness=None, groupIds=g))
+    els += finder(x + quiet, y + quiet)
+    els += finder(x + quiet + grid - m * 7, y + quiet)
+    els += finder(x + quiet, y + quiet + grid - m * 7)
+    if caption:
+        els.append(text(x, y + size + 6, caption, 10.5, MUTED, "center", size, g))
+    return els, y + size + (22 if caption else 6)
+
+
+def label_card(x, y, w, sku, name, sub, g=None, h=178, title="BARCODE & QR — generated from the SKU"):
+    """Item-profile card: Code128 of the SKU + QR of the same SKU + print actions.
+
+    Both codes carry the SAME payload — the SKU — so one scan resolves to one
+    item whichever symbol the staff member happens to point the reader at.
+    """
+    g = g or []
+    els = [rect(x, y, w, h, strokeColor=HAIRLINE, backgroundColor=BG, strokeWidth=1, groupIds=g),
+           text(x + 16, y + 13, title, 11, MUTED, width=w - 32, g=g)]
+    qs = min(96.0, h - 86)
+    bcw = w - qs - 48
+    e, _ = barcode(x + 16, y + 32, bcw, h - 118, sku, g)
+    els += e
+    els.append(text(x + 16, y + h - 82, f"Code 128  ·  {sub}", 10, FAINT, width=bcw, g=g))
+    e, _ = qr(x + w - qs - 16, y + 32, qs, sku, g)
+    els += e
+    els.append(text(x + w - qs - 16, y + qs + 36, "QR = SKU", 10, FAINT, "center", qs, g))
+    els += btn(x + 16, y + h - 44, 124, 32, "🖨 Print label", "secondary", g)
+    els += btn(x + 148, y + h - 44, 110, 32, "⬇ Download", "ghost", g)
+    return els, y + h + 12
 
 
 def kpi_card(x, y, w, h, label, value, color=INK, delta=None, icon=None, g=None):
@@ -292,11 +435,13 @@ def stat_row(x, y, w, cards, h=92, gap=14, g=None):
     return els, y + h + 20
 
 
-def table(x, y, w, cols, rows, g=None, row_h=44, widths=None, zebra=True):
+def table(x, y, w, cols, rows, g=None, row_h=44, widths=None, zebra=True, sheet=False):
     """cols = ['SKU', …]; rows = [[c1, c2, …], …]. Returns (elements, next_y).
 
     `widths` are relative weights; defaults to equal columns.
     A cell may be a (text, color) tuple to colour it.
+    `sheet=True` draws an Excel-like header: sort + per-column filter, then a
+    filter row. Default stays a simple list header so existing boards do not move.
     """
     g = g or []
     n = len(cols)
@@ -306,11 +451,26 @@ def table(x, y, w, cols, rows, g=None, row_h=44, widths=None, zebra=True):
     for wt in widths:
         xs.append(x + acc / total * w)
         acc += wt
-    els = [rect(x, y, w, 38, strokeColor=HAIRLINE, backgroundColor=SOFT, strokeWidth=1, groupIds=g)]
+    header_h = 42 if sheet else 38
+    els = [rect(x, y, w, header_h, strokeColor=HAIRLINE, backgroundColor=SOFT, strokeWidth=1, groupIds=g)]
     for i, c in enumerate(cols):
-        cw = (w * widths[i] / total) - 20
-        els.append(text(xs[i] + 12, y + 12, c, 11, MUTED, width=max(20, cw), g=g))
-    yy = y + 38
+        col_w = w * widths[i] / total
+        cw = col_w - 20
+        if sheet:
+            els.append(text(xs[i] + 10, y + 13, str(c), 11, MUTED, width=max(16, cw - 28), g=g))
+            els.append(text(xs[i] + col_w - 28, y + 12, ICON["sort"], 11, FAINT, g=g))
+        else:
+            els.append(text(xs[i] + 12, y + 12, c, 11, MUTED, width=max(20, cw), g=g))
+    yy = y + header_h
+    if sheet:
+        els.append(rect(x, yy, w, 30, strokeColor=HAIRLINE, backgroundColor=BG, strokeWidth=1, groupIds=g))
+        for i, c in enumerate(cols):
+            col_w = w * widths[i] / total
+            els.append(rect(xs[i] + 6, yy + 4, max(24, col_w - 12), 22,
+                            strokeColor=HAIRLINE, backgroundColor=SOFT2, strokeWidth=1, groupIds=g))
+            els.append(text(xs[i] + 12, yy + 8, ICON["filter"] + "  Filter", 10, FAINT,
+                            width=max(20, col_w - 24), g=g))
+        yy += 30
     for r_i, row in enumerate(rows):
         if zebra and r_i % 2:
             els.append(rect(x, yy, w, row_h, strokeColor="transparent", backgroundColor=SOFT2,
@@ -328,7 +488,7 @@ def table(x, y, w, cols, rows, g=None, row_h=44, widths=None, zebra=True):
 def pagination(x, y, w, summary="1–10 of 124", g=None):
     g = g or []
     els = [text(x, y + 10, summary, 12, MUTED, g=g)]
-    bx = x + w - 210
+    bx = x + w - 288          # 5 buttons + 4 gaps — keeps the strip inside w
     for lab in ["‹ Prev", "1", "2", "3", "Next ›"]:
         bw = 44 if lab.isdigit() else 66
         els.append(rect(bx, y, bw, 34, strokeColor=LINE, backgroundColor=BG, strokeWidth=1, groupIds=g))
@@ -487,8 +647,8 @@ NAV = [
 
 SUBNAV = {
     "Inventory": ["Items", "Stock ledger", "Reservations", "Transfers", "Reports"],
-    "Sales": ["Orders", "Rentals", "Customers", "Returns", "Reports"],
-    "Procurement": ["Purchase orders", "Receipts (GRN)", "Suppliers", "Reports"],
+    "Sales": ["Counter", "Orders", "Returns", "Customers", "Reports"],
+    "Procurement": ["Suppliers", "Purchase orders", "Receipts (GRN)", "Reports"],
     "Finance": ["Dashboard", "Cash & banks", "Expenses", "A/P", "A/R", "P&L"],
     "Settings": ["Tenant", "Users & roles", "Branches", "Master data", "Audit log"],
 }
@@ -577,16 +737,14 @@ def desk_shell(ox, oy, title, active_nav, group, show_sidebar=True, sub_active=N
                         strokeColor=HAIRLINE, backgroundColor=BG, strokeWidth=1, groupIds=g))
         els.append(text(ox + SIDEBAR_W + 28, top + 21, sub_active or active_nav, 15, INK,
                         width=300, g=g))
-        right = topbar_extra or f"{ICON['globe']} EN (LTR) {ICON['down']}    {ICON['bell']} 3    {ICON['user']} Ahmad {ICON['down']}"
+        # Language switcher shows the LANGUAGE ONLY — never a direction badge.
+        right = topbar_extra or f"{ICON['globe']} English {ICON['down']}    {ICON['bell']} 3    {ICON['user']} Ahmad {ICON['down']}"
         els.append(text(ox + DESK_W - 420, top + 21, right, 12.5, MUTED, "right", 390, g=g))
         cy = top + TOPBAR_H + 26
         ch = DESK_H - TOPBAR_H - 74
     else:
         cx, cw = ox + 60, DESK_W - 120
         cy, ch = top + 30, DESK_H - 80
-    if rtl:
-        els.append(text(ox + DESK_W - 220, oy + TITLE_H + 10, "RTL — Dari / Pashto", 11, ROSE,
-                        "right", 200, g))
     return els, cx, cy, cw, ch
 
 
@@ -677,6 +835,62 @@ def section_label(x, y, label, color=ROSE):
 
 def grid_pos(i, cols, frame_w=DESK_W, frame_h=DESK_H, gap_x=GAP_X, row_gap=ROW_GAP):
     return (i % cols) * (frame_w + gap_x), (i // cols) * (frame_h + row_gap)
+
+
+def grouped_board(groups, cols, frame_w=DESK_W, frame_h=DESK_H,
+                  gap_x=GAP_X, row_gap=ROW_GAP, colors=None, arrows=True):
+    """Lay screens out section by section — every section starts on a fresh row.
+
+    groups = [(SECTION LABEL, [fn, fn, …]), …] where each fn(ox, oy) -> elements.
+    This is what makes a board readable top-to-bottom: a reader sees one heading,
+    then only the screens that belong under it, in the order they are used.
+    """
+    els = []
+    row = 0
+    for gi, (label, fns) in enumerate(groups):
+        colour = (colors or {}).get(label, ROSE)
+        els += section_label(0, row * (frame_h + row_gap) - 74,
+                             f"{chr(65 + gi)}.  {label}", colour)
+        for i, fn in enumerate(fns):
+            ox = (i % cols) * (frame_w + gap_x)
+            oy = (row + i // cols) * (frame_h + row_gap)
+            els += fn(ox, oy)
+            if arrows and i and i % cols:
+                y = oy + TITLE_H + frame_h / 2
+                els += arrow(ox - gap_x + 10, y, ox - 10, y)
+        row += (len(fns) + cols - 1) // cols
+    return els
+
+
+# ── Right-to-left mirroring ───────────────────────────────────────
+#
+# The Dari / Pashto boards are the SAME drawing, mirrored. Building them by
+# reflection rather than by hand guarantees the two versions can never drift:
+# one layout change updates both. Mirroring is geometric only — the strings are
+# swapped separately by i18n.localise().
+
+_ALIGN_FLIP = {"left": "right", "right": "left", "center": "center"}
+
+
+def mirror(elements, x0, width):
+    """Reflect every element about the vertical axis of [x0, x0 + width]."""
+    out = []
+    for el in elements:
+        e = copy.deepcopy(el)
+        if e.get("points"):
+            # Lines and arrows are anchored at their first point, so mirror the
+            # anchor and negate the x offsets — an arrow that pointed right now
+            # points left, which is what a mirrored flow needs.
+            e["x"] = 2 * x0 + width - el.get("x", 0)
+            e["points"] = [[-px, py] for px, py in el["points"]]
+        else:
+            e["x"] = 2 * x0 + width - el.get("x", 0) - el.get("width", 0)
+        if e.get("type") == "text" and not (e.get("customData") or {}).get("spec"):
+            # Spec notes stay in English, so they keep their left alignment even
+            # on a mirrored board — only UI text follows the reading direction.
+            e["textAlign"] = _ALIGN_FLIP.get(e.get("textAlign", "left"), "left")
+        out.append(e)
+    return out
 
 
 def flow_arrows(count, cols, frame_w=DESK_W, frame_h=DESK_H, gap_x=GAP_X, row_gap=ROW_GAP):

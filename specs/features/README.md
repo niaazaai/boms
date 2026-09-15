@@ -37,7 +37,7 @@ bridal clothing.
 
 - Mobile-first, owner-friendly
 - Tenant-bound users, multi-role RBAC, no invite flow
-- UI locale from tenant settings: English (LTR) · Dari (RTL) · Pashto (RTL)
+- UI locale from tenant settings: English · دری Dari · پښتو Pashto. Dari and Pashto mirror the whole shell; the switcher names the language and never shows a direction badge
 - Create/edit forms in drawers that follow the text direction
 - Auditable stock ledger with weighted average cost and DB-enforced booking guards
 - Sale, rental and **mixed** orders

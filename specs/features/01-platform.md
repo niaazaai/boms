@@ -144,7 +144,7 @@ Each is the same shape — list + drawer + search/filter:
 | P6.3 | Units | pcs, set, box |
 | P6.4 | Payment methods | cash, card, transfer, wallet |
 | P6.5 | Payment terms | immediate, deposit %, net days |
-| P6.6 | Languages (seeded, system) | English (LTR) · Dari (RTL) · Pashto (RTL) |
+| P6.6 | Languages (seeded, system) | English · دری Dari · پښتو Pashto — direction is derived from the language, never shown as a label |
 
 ### P7 · Preferences (`tenant_settings`)
 | | Group | Settings |

@@ -4,7 +4,7 @@
 Product rules drawn here:
   • Login-only public entry — no sign-up, NO INVITE FLOW anywhere
   • No language switcher on login; locale comes from tenants.default_language_id
-  • English → LTR · Dari / Pashto → full RTL (drawer flips side)
+  • English reads left-to-right · Dari and Pashto mirror the whole shell
   • Users are tenant-bound: Tenant * required, roles are multi-select
   • Login identifier is GLOBALLY unique email or phone (corrected flaw A8)
   • System roles are COPIED to the tenant, never shared/edited globally (A7)
@@ -86,7 +86,7 @@ def _d1(ox, oy):
                 "PUBLIC SURFACE = this page + forgot password. Nothing else. No shop self-registration, no invite-accept route, no invite token — the invite flow is removed entirely.\n"
                 "Reads users by GLOBALLY unique email or phone. This is the corrected flaw A8: v1 made email unique only per tenant, but login has no tenant context yet,\n"
                 "so two users in different tenants with the same email made authentication non-deterministic. After sign-in the shell reads tenants.default_language_id and\n"
-                "mounts the whole UI LTR (en) or RTL (fa / ps).",
+                "mounts the whole UI left-to-right (en) or right-to-left (fa / ps).",
                 ACCENT, G)
     return els
 
@@ -216,7 +216,7 @@ def _d4(ox, oy):
 def _d5(ox, oy):
     """Create user drawer."""
     g = nid(); G = [g]
-    els, cx, cy, cw, ch = desk_shell(ox, oy, "5. Create user — drawer (LTR → right)",
+    els, cx, cy, cw, ch = desk_shell(ox, oy, "5. Create user — drawer over the users list",
                                      "Settings", g, sub_active="Users & roles")
     e, y = page_header(cx, cy, cw, "Users", subtitle="Creating a new user", g=G)
     els += e
@@ -225,7 +225,7 @@ def _d5(ox, oy):
                  G, row_h=42, widths=[1.2, 1.4, 0.7])
     els += e
     de, fx, fy, fw = drawer(cx, cy - 20, cw, ch, "New user", "right", 470,
-                            "Opens from the right in LTR · from the left in RTL", G)
+                            "Opens from the right in English · from the left in Dari and Pashto", G)
     els += de
     yy = fy
     e, yy = _sel(fx, yy, fw, "Tenant", "Al Dubai Bridal (ADF)", G, True)
@@ -360,7 +360,7 @@ def _d8(ox, oy):
         ("MASTER DATA", [(ICON["cash"], "Currencies & rates", "AFN default · USD, EUR", VIOLET),
                          (ICON["tag"], "Units", "pcs, set, box", VIOLET),
                          (ICON["receipt"], "Payment methods & terms", "Cash, card, transfer, wallet", VIOLET)]),
-        ("SYSTEM", [(ICON["globe"], "Languages", "English (LTR) · Dari (RTL) · Pashto (RTL)", WARN),
+        ("SYSTEM", [(ICON["globe"], "Languages", "English · دری Dari · پښتو Pashto", WARN),
                     (ICON["bell"], "Notifications", "Low stock, due returns, overdue A/R", WARN),
                     (ICON["export"], "Data export", "CSV exports and backups", WARN)]),
     ]
@@ -392,10 +392,10 @@ def _d9(ox, oy):
     y += 56
     e, y2 = table(cx, y, cw,
                   ["Code", "Name", "Type", "City", "Currency", "Language", "Timezone", "Users", "Branches", "Status", ""],
-                  [["ADF", "Al Dubai Bridal", "shop", "Kabul", "AFN", ("Dari (RTL)", VIOLET), "Asia/Kabul", "5", "2", ("active", OK), "Edit"],
-                   ["RSB", "Roshan Bridal", "boutique", "Herat", "AFN", ("Pashto (RTL)", VIOLET), "Asia/Kabul", "3", "1", ("active", OK), "Edit"],
-                   ["MZB", "Mazar Bridal Mall", "mall", "Mazar-i-Sharif", "AFN", ("English (LTR)", INFO), "Asia/Kabul", "8", "3", ("active", OK), "Edit"],
-                   ["KDB", "Kandahar Bridal House", "shop", "Kandahar", "AFN", ("Pashto (RTL)", VIOLET), "Asia/Kabul", "2", "1", ("suspended", DANGER), "Edit"]],
+                  [["ADF", "Al Dubai Bridal", "shop", "Kabul", "AFN", ("دری  Dari", VIOLET), "Asia/Kabul", "5", "2", ("active", OK), "Edit"],
+                   ["RSB", "Roshan Bridal", "boutique", "Herat", "AFN", ("پښتو  Pashto", VIOLET), "Asia/Kabul", "3", "1", ("active", OK), "Edit"],
+                   ["MZB", "Mazar Bridal Mall", "mall", "Mazar-i-Sharif", "AFN", ("English", INFO), "Asia/Kabul", "8", "3", ("active", OK), "Edit"],
+                   ["KDB", "Kandahar Bridal House", "shop", "Kandahar", "AFN", ("پښتو  Pashto", VIOLET), "Asia/Kabul", "2", "1", ("suspended", DANGER), "Edit"]],
                   G, row_h=46, widths=[0.55, 1.5, 0.7, 1.1, 0.75, 1.05, 1.0, 0.55, 0.7, 0.8, 0.45])
     els += e
     els += note(cx, y2 + 8, cw,
@@ -442,7 +442,7 @@ def _d10(ox, oy):
     yy += 18
     e, yy = _sel(fx, yy, fw, "Default currency", "AFN — Afghan afghani", G, True)
     els += e
-    e, yy = _sel(fx, yy, fw, "Default language", "دری  Dari  (RTL)", G, True)
+    e, yy = _sel(fx, yy, fw, "Default language", "دری  —  Dari", G, True)
     els += e
     e, yy = _sel(fx, yy, fw, "Timezone", "Asia/Kabul  (UTC+4:30)", G, True)
     els += e
@@ -451,7 +451,7 @@ def _d10(ox, oy):
     els.append(text(fx, yy + 22, f"{ICON['photo']}   Replace logo", 12, ACCENT, "center", fw, G))
     els += btn(fx, yy + 74, fw, 44, "Save tenant", "primary", G)
     els += note(fx, yy + 128, fw,
-                "Changing Default language remounts the whole shell:\nDari or Pashto → RTL, drawers open from the LEFT.\nThere is no per-user or per-page override.", VIOLET, G)
+                "Changing Default language remounts the whole shell:\nDari or Pashto mirror it, and drawers open from the LEFT.\nThere is no per-user or per-page override.", VIOLET, G)
     return els
 
 
@@ -579,9 +579,9 @@ def _d13(ox, oy):
 def _d14(ox, oy):
     """RTL mirror — Dari."""
     g = nid(); G = [g]
-    els, cx, cy, cw, ch = desk_shell(ox, oy, "14. RTL reference — Dari (دری)",
+    els, cx, cy, cw, ch = desk_shell(ox, oy, "14. Dari (دری) — the mirrored shell",
                                      "Settings", g, sub_active="Users & roles", rtl=True,
-                                     topbar_extra=f"Ahmad {ICON['user']}    3 {ICON['bell']}    (RTL) دری {ICON['globe']}")
+                                     topbar_extra=f"Ahmad {ICON['user']}    3 {ICON['bell']}    دری {ICON['globe']}")
     els.append(rect(cx - 28 - SIDEBAR_W, cy - 86, SIDEBAR_W, 40, strokeColor=ROSE,
                     backgroundColor=ROSE_BG, strokeWidth=1, groupIds=G))
     els.append(text(cx - 28 - SIDEBAR_W, cy - 74, "◀ sidebar mirrors to the RIGHT", 10.5, ROSE, "center", SIDEBAR_W, G))
@@ -609,9 +609,9 @@ def _d14(ox, oy):
     ch_, _ = chip(xx, yy + 20, "✕  انباردار", ACCENT, g=G); els += ch_
     els += btn(fx, yy + 62, fw, 44, "ایجاد کاربر", "primary", G)
     els += note(cx, oy + 800, cw,
-                "RTL RULE SET — applies to every screen in the system when tenants.default_language_id is Dari (fa) or Pashto (ps):\n"
+                "MIRRORING RULE SET — applies to every screen in the system when tenants.default_language_id is Dari (fa) or Pashto (ps):\n"
                 "   1. Sidebar moves to the right edge · 2. Drawers open from the LEFT · 3. Text and table columns right-align, and column ORDER reverses\n"
-                "   4. Back arrows, chevrons and progress steppers mirror · 5. Numbers, SKUs, currency amounts and dates stay LTR inside RTL text\n"
+                "   4. Back arrows, chevrons and progress steppers mirror · 5. Numbers, SKUs, barcodes, currency amounts and dates keep reading left-to-right\n"
                 "   6. Icons keep their meaning but directional ones (← →) flip. Direction is a tenant setting only — there is no per-user or per-page switcher.",
                 ROSE, G)
     return els
@@ -825,9 +825,9 @@ def _m8(ox, oy):
 
 def _m9(ox, oy):
     g = nid(); G = [g]
-    els, cx, cy, cw, ch = phone_shell(ox, oy, "9. RTL — Dari (دری)", g, "Home")
+    els, cx, cy, cw, ch = phone_shell(ox, oy, "9. Dari (دری) — mirrored", g, "Home")
     els.append(rect(cx, cy - 30, cw, 24, strokeColor=ROSE, backgroundColor=ROSE_BG, strokeWidth=1, groupIds=G))
-    els.append(text(cx, cy - 26, "RTL reference — everything mirrors", 10, ROSE, "center", cw, G))
+    els.append(text(cx, cy - 26, "Dari — everything mirrors", 10, ROSE, "center", cw, G))
     els.append(text(cx, cy + 6, "صبح بخیر، احمد", 19, INK, "right", cw, G))
     els.append(text(cx, cy + 32, "الدوبی برایدل · شعبه مرکزی · ۱۲ سپتامبر", 11, MUTED, "right", cw, G))
     y = cy + 62
@@ -861,9 +861,9 @@ def _m9(ox, oy):
 def desktop():
     els = board_title(0, -170, "BOMS Desktop — Platform, Auth & Settings",
                       "Login-only entry · no invite flow · tenant-bound users with multi-role RBAC · "
-                      "tenant-driven locale (EN LTR / Dari · Pashto RTL) · drawers follow direction")
+                      "tenant-driven locale (English · Dari · Pashto) · drawers follow the reading direction")
     screens = [_d1, _d2, _d3, _d4, _d5, _d6, _d7, _d8, _d9, _d10, _d11, _d12, _d13, _d14]
-    labels = {0: "AUTH & HOME", 4: "USERS & ACCESS", 8: "TENANT & STRUCTURE", 12: "AUDIT & RTL"}
+    labels = {0: "AUTH & HOME", 4: "USERS & ACCESS", 8: "TENANT & STRUCTURE", 12: "AUDIT & MIRRORED SHELL"}
     for i, fn in enumerate(screens):
         ox, oy = grid_pos(i, DESK_COLS)
         if i in labels:
@@ -875,7 +875,7 @@ def desktop():
 
 def mobile():
     els = board_title(0, -150, "BOMS Mobile — Platform, Auth & Settings",
-                      "Login · home dashboard · settings · users & roles · branches · RTL reference")
+                      "Login · home dashboard · settings · users & roles · branches · mirrored Dari shell")
     screens = [_m1, _m2, _m3, _m4, _m5, _m6, _m7, _m8, _m9]
     for i, fn in enumerate(screens):
         ox, oy = grid_pos(i, PHONE_COLS, PHONE_W, PHONE_H)
