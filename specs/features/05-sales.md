@@ -127,7 +127,7 @@ sales_orders.order_kind      ('sale' | 'rental' | 'mixed')   ← DERIVED on save
 ### S8 · Hub & list UX
 | | Feature |
 |---|---|
-| S8.1 | Big "New Sale" and "New Rental" CTAs |
+| S8.1 | One **New ticket** CTA — the counter, not two wizards | Phone search · register in a drawer · Rent/Sell switch per line · price input defaults to catalogue |
 | S8.2 | KPIs: today revenue · open orders · due returns · overdue · deposits held · unpaid A/R |
 | S8.3 | Today's schedule — pickups and returns by hour |
 | S8.4 | Tabs: All / Sale / Rental / Mixed, filtered by status |
@@ -156,29 +156,23 @@ All reports: period · branch · customer · category filters, CSV export, print
 
 | # | Screen |
 |---|--------|
-| 1 | Sales hub |
-| 2 | Orders list |
-| 3 | Customer pick / quick-create |
-| 4 | New sale checkout |
-| 5 | New rental checkout |
-| 6 | Availability conflict modal |
-| 7 | Collect payment drawer |
-| 8 | Order detail — sale |
-| 9 | Order detail — rental (timeline) |
-| 10 | Mark returned (condition · late fee · deposit settlement) |
-| 11 | Rental claim |
-| 12 | Sale return |
-| 13 | Customers list |
-| 14 | Customer detail |
-| 15 | Sales summary report |
-| 16 | Rental performance report |
+| 1 | Sales dashboard |
+| 2 | Counter — phone search, Rent/Sell per line, editable price |
+| 3 | Register customer drawer (over the counter) |
+| 4 | Printed slip with order barcode + QR |
+| 5 | Orders list |
+| 6 | Order detail |
+| 7 | Scan return drawer (collect / refund / restock) |
+| 8 | Sale return (scan slip) |
+| 9 | Customers list + new-customer drawer + profile |
+| 10 | Sales summary · Rental performance · Deposits & refunds |
 
 ---
 
 ## Business rules
 
 - An item with `available_qty = 0` cannot be added, unless `allow_negative_stock` is on (then the line is flagged).
-- `purpose='sale'` items cannot appear on rental lines, and vice versa; `both` is unrestricted.
+- Sellable = has a sale price; rentable = has a rental price. There is no `purpose` field. Each counter line has a Rent | Sell switch; the default price is the catalogue price and staff may type a higher amount.
 - Rental confirm creates a reservation; the DB exclusion constraint rejects overlaps (ADR-010).
 - Cancelling a confirmed rental releases its reservation.
 - Deposits never enter Income. They move Cash and the deposit liability only.
