@@ -101,8 +101,10 @@ CONVENTIONS
             -- inventory_items row on post and WRITES THE ID BACK HERE.       [D2]
         item_name                   varchar(255) not null   -- draft / snapshot name
         item_spec_json              jsonb
-            -- captured on the PO for new items: size, colour, fabric, purpose,
-            -- category — used to pre-fill the item created at receipt.
+            -- captured on the PO for new items: size, colour, fabric,
+            -- category, sale price, rental price — used to pre-fill the item
+            -- created at receipt. No purpose and no rental period: the item
+            -- created on post derives its channel from those prices.  [B14]
         quantity_ordered            numeric(18,3) not null
         quantity_received           numeric(18,3) default 0
             -- RECOMPUTED from receipts, never incremented in place.          [D3]

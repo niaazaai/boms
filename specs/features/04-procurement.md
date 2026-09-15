@@ -62,11 +62,11 @@ landed_unit_cost_i = unit_cost_i + (allocated_i + line_other_cost_i) / qty_recei
 |---|---|---|
 | R2.1 | Create PO | supplier, branch, receive warehouse, order date, expected date |
 | R2.2 | Currency + snapshotted exchange rate | defaults from the supplier, rate from `platform_exchange_rates` |
-| R2.3 | Lines: existing item **or** free-text new item | new lines capture size/colour/purpose in `item_spec_json` |
+| R2.3 | Lines: existing item **or** free-text new item | new lines capture size/colour/category **and both prices** in `item_spec_json` — no `purpose`, no rental period (ADR-013) |
 | R2.4 | Per line: qty, unit cost, line other cost, line total | |
 | R2.5 | Header: discount, tax, other cost (shipping/customs) | |
 | R2.6 | Status: draft → ordered → partial received → received / cancelled / void | |
-| R2.7 | **Approval on draft → ordered** | records `approved_by` / `approved_at` |
+| R2.7 | **No PO approval** | Place order writes `status='ordered'` immediately. There is no `approved_by` step. |
 | R2.8 | Draft POs touch neither stock nor finance | |
 | R2.9 | Duplicate PO / reorder from history | |
 | R2.10 | Expected-delivery tracking | upcoming and overdue deliveries on the hub |
@@ -79,7 +79,7 @@ landed_unit_cost_i = unit_cost_i + (allocated_i + line_other_cost_i) / qty_recei
 | R3.1 | Receive against a PO, full or partial | only `ordered` / `partial_received` POs |
 | R3.2 | Line table: ordered · already received · receiving now | |
 | R3.3 | **Allocated other cost + landed unit cost columns** | visible, auditable (ADR-009) |
-| R3.4 | **Over-receipt blocked** unless approved | `over_receipt_approved_by` |
+| R3.4 | **Over-receipt blocked** | receive qty is capped at remaining — no approval path |
 | R3.5 | **Creates `inventory_items` for free-text lines on post** | generates SKU, writes the id back to the PO line |
 | R3.6 | Guided mini-form for new items | pre-filled from `item_spec_json` |
 | R3.7 | Choose receive warehouse per receipt | |
@@ -140,20 +140,19 @@ All reports: period · supplier · branch · warehouse filters, CSV export, prin
 
 | # | Screen |
 |---|--------|
-| 1 | Procurement hub |
-| 2 | Suppliers list |
-| 3 | Supplier detail (tabs) |
-| 4 | Add / edit supplier drawer |
+| 1 | Procurement dashboard |
+| 2 | Suppliers list (sheet table) |
+| 3 | New / edit supplier drawers |
+| 4 | Supplier profile — Overview · POs · Receipts · Payments · Items supplied · Price history |
 | 5 | Purchase orders list |
-| 6 | Create / edit PO |
-| 7 | PO detail (status timeline, receipts, payments) |
-| 8 | Receive goods (GRN) with landed cost |
-| 9 | GRN — create new item mini-form |
+| 6 | New PO drawer (Place order — no approval) |
+| 7 | PO detail |
+| 8 | Receipts list + receive drawer |
+| 9 | New item on GRN drawer |
 | 10 | GRN posted confirmation |
-| 11 | Pay supplier |
-| 12 | Supplier return / debit note |
-| 13 | Reports hub + purchase register |
-| 14 | Stock-in report |
+| 11 | Pay supplier drawer |
+| 12 | Supplier return drawer |
+| 13 | Purchase register · Stock-in · Supplier aging |
 
 ---
 
@@ -162,7 +161,7 @@ All reports: period · supplier · branch · warehouse filters, CSV export, prin
 - Draft POs affect neither stock nor finance.
 - Only `ordered` or `partial_received` POs can be received.
 - `quantity_received` is recomputed from receipts, never incremented in place.
-- Receiving more than ordered is blocked unless `over_receipt_approved_by` is set.
+- Receiving more than ordered is blocked — the receive qty cannot exceed remaining. There is no over-receipt approval.
 - Header `other_cost` is allocated pro-rata by line value at receipt time (ADR-009).
 - `landed_unit_cost` is the only cost that reaches inventory.
 - A posted receipt is never edited — only voided, which reverses stock and payable.
@@ -199,7 +198,7 @@ All reports: period · supplier · branch · warehouse filters, CSV export, prin
 
 - [ ] Receiving a brand-new dress creates the SKU, sets qty 1, writes the item id back to the PO line.
 - [ ] A PO with 1,000 AFN header shipping over lines worth 6,000 and 4,000 allocates 600 / 400; landed unit costs reflect it; the ledger shows the landed cost, not the raw cost.
-- [ ] Receiving 3 against an order of 2 is blocked until an over-receipt approval is recorded.
+- [ ] Receiving 3 against an order of 2 is blocked — the qty input cannot exceed remaining.
 - [ ] An unpaid receipt appears in the Finance A/P pillar at exactly its payable balance.
 - [ ] Paying a supplier reduces cash, reduces A/P, and creates exactly one `finance_transactions` row linked from the payment.
 - [ ] Voiding a posted GRN reverses the stock transactions and the payable; both documents remain visible.
