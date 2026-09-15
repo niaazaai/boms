@@ -109,7 +109,7 @@ def _sidebar_spec(ox, oy):
                     "        (open orders, due returns) — never vanity metrics.\n\n"
                     "4.  Branch switcher and user block are pinned to the\n"
                     "        bottom; switching branch re-scopes every list.\n\n"
-                    "5.  In RTL (Dari / Pashto) the whole rail mirrors to the\n"
+                    "5.  In Dari and Pashto the whole rail mirrors to the\n"
                     "        right edge and chevrons flip.\n\n"
                     "6.  Collapsed rail keeps icons only; labels appear as\n"
                     "        tooltips. State persists per user.\n\n"
@@ -225,7 +225,7 @@ def _module_map(ox, oy):
 # ── 3. SITEMAP ────────────────────────────────────────────────────
 
 def _sitemap(ox, oy):
-    els = section_label(ox, oy - 60, "SCREEN SITEMAP — 84 SCREENS ACROSS 5 MODULES", ROSE)
+    els = section_label(ox, oy - 60, "SCREEN SITEMAP — MODULE BOARDS, GROUPED LIKE THE SIDEBAR", ROSE)
     els.append(text(ox, oy - 18,
                     "Every screen below is drawn in its module board. Desktop counts first, mobile in brackets.",
                     13, MUTED, width=1800))
@@ -236,28 +236,41 @@ def _sitemap(ox, oy):
             "Users list", "Create user drawer", "Roles list",
             "Permission matrix", "Settings hub", "Tenants list (Super Admin)",
             "Tenant drawer", "Preferences", "Branches → warehouses",
-            "Audit log", "RTL reference (Dari)",
+            "Audit log", "Dari mirrored shell",
         ]),
-        ("INVENTORY  16 (10)", INFO, [
-            "Inventory hub", "Items list", "Item detail", "Item stock & cost tab",
-            "Add / edit item drawer", "Availability calendar", "Stock ledger",
-            "Manual stock entry", "Receive PO (GRN)", "Adjustment", "Dispose",
-            "Transfer", "Reservations + conflict", "Valuation report",
-            "Stock movement / stock-in", "Rental utilisation & ROI",
+        ("INVENTORY  23 (17)", INFO, [
+            "A · Dashboard",
+            "B · Items list",
+            "B · New item drawer (barcode + QR)",
+            "B · Edit item drawer (identity locked)",
+            "B · Item profile — Overview",
+            "B · Item profile — Stock & movement",
+            "B · Item profile — Reservations",
+            "B · Item profile — Rentals",
+            "B · Item profile — Photos",
+            "B · Item profile — Audit",
+            "C · Stock ledger",
+            "C · Stock in / Receive PO drawers",
+            "C · Adjust / Dispose drawers",
+            "D · Reservations list",
+            "D · Reserve drawer + conflict guard",
+            "D · Availability calendar",
+            "E · Transfers list + drawer",
+            "F · Valuation / movement / ROI",
         ]),
-        ("SALES  16 (10)", OK, [
-            "Sales hub", "Orders list", "Customer pick", "New sale checkout",
-            "New rental checkout", "Availability conflict", "Collect payment",
-            "Order detail — sale", "Order detail — rental", "Mark returned",
-            "Rental claim", "Sale return", "Customers list", "Customer detail",
-            "Sales summary report", "Rental performance report",
+        ("SALES  14 (8)", OK, [
+            "Dashboard", "Counter — Rent/Sell per line",
+            "Register customer drawer", "Printed slip (barcode + QR)",
+            "Orders list + detail", "Scan return drawer",
+            "Sale return (scan slip)", "Customers list + drawer + profile",
+            "Sales summary", "Rental performance", "Deposits & refunds",
         ]),
-        ("PROCUREMENT  14 (8)", WARN, [
-            "Procurement hub", "Suppliers list", "Supplier detail",
-            "Supplier drawer", "Purchase orders list", "Create PO", "PO detail",
-            "Receive goods (GRN)", "GRN new-item form", "GRN posted confirmation",
-            "Pay supplier", "Supplier return", "Purchase register",
-            "Stock-in report",
+        ("PROCUREMENT  22 (8)", WARN, [
+            "Dashboard", "Suppliers list + drawers",
+            "Supplier profile — 6 tabs", "PO list + new-PO drawer + detail",
+            "Receipts list + receive drawer", "New item on GRN drawer",
+            "GRN posted", "Pay supplier drawer", "Supplier return drawer",
+            "Purchase register", "Stock-in", "Supplier aging",
         ]),
         ("FINANCE  12 (8)", VIOLET, [
             "Dashboard — 5 pillars", "Period comparison", "Cash & banks",
@@ -285,7 +298,7 @@ def _sitemap(ox, oy):
         ("Error", "What failed, what to try, and the retry action", DANGER),
         ("Permission", "Hidden entirely when the role lacks it — not disabled", WARN),
         ("Offline", "Queue the posting with its idempotency_key, show pending", INFO),
-        ("RTL", "Mirrored layout when the tenant language is Dari or Pashto", ROSE),
+        ("Mirrored", "Whole shell flips when the tenant language is Dari or Pashto", ROSE),
     ]
     for i, (name, desc, col) in enumerate(states):
         x = ox + i * 320
