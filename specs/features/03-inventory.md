@@ -61,17 +61,18 @@ Two rules that the v1 spec got wrong and that everything here depends on:
 ### I2 · Items
 | | Feature | Notes |
 |---|---|---|
-| I2.1 | Create item in a drawer | RTL/LTR aware |
+| I2.1 | Create / edit item in a drawer | over the items list — a list and its form never share a page |
 | I2.2 | Auto SKU `{PREFIX}{YY}-{#####}` | from `platform_sequences`, unique **per tenant** |
-| I2.3 | Bridal attributes | size, colour, fabric, season, purpose, quality, components |
+| I2.3 | Bridal attributes | size, colour, fabric, season, quality, components — **no `purpose`** (ADR-013) |
 | I2.4 | Serialised flag | `is_serialised` — one physical dress (qty 1) vs fungible accessories |
 | I2.5 | Sale pricing | price, currency, unit |
-| I2.6 | Rental pricing | price, period days, deposit, late fee/day, buffer days override |
+| I2.5a | Channel is derived | sellable = sale price set · rentable = rental price set · both = both (ADR-013) |
+| I2.6 | Rental pricing | price (one rental, **any length**), deposit, late fee/day, cleaning-buffer override — **no fixed period** (ADR-013) |
 | I2.7 | Cost-recovery settings | `expected_rental_uses` override, `acquisition_cost`, `amortised_cost_to_date` |
 | I2.8 | Photos | one main + gallery, reorderable |
 | I2.9 | Lifecycle status | active · repairing · discontinued · disposed (**stored**) |
 | I2.10 | Derived availability chip | available · reserved · rented · out of stock (**never stored**) |
-| I2.11 | Barcode | optional, unique per tenant |
+| I2.11 | Barcode + QR | **generated from the SKU**, never typed; Code 128 stored, QR rendered; both shown on the item profile with Print label / Download (ADR-014) |
 | I2.12 | Custom fields | `jsonb` for tenant-specific attributes |
 | I2.13 | Duplicate item | clone attributes + pricing, new SKU |
 
@@ -182,8 +183,8 @@ All reports: branch · warehouse · category · date-range filters, CSV export, 
 ### I13 · List & search UX
 | | Feature |
 |---|---|
-| I13.1 | Search by name, SKU, barcode |
-| I13.2 | Filters: lifecycle, derived availability, purpose, category, size, colour, branch, warehouse |
+| I13.1 | Search by name, SKU, barcode — **and scan**: camera or USB reader resolves a Code 128 / QR straight to the item |
+| I13.2 | Filters: lifecycle, derived availability, sellable / rentable, category, size, colour, branch, warehouse |
 | I13.3 | Mobile list cards: photo, name, status chip, available qty, price |
 | I13.4 | Desktop table with column chooser |
 | I13.5 | Saved filter views |
@@ -194,31 +195,54 @@ All reports: branch · warehouse · category · date-range filters, CSV export, 
 
 ## Screens (implementation order)
 
+The board reads top to bottom in six groups, and every group starts a fresh row:
+**A** dashboard · **B** items · **C** stock ledger · **D** reservations ·
+**E** transfers · **F** reports. Every create and edit is a drawer over its list.
+
 | # | Screen | Wireframe |
 |---|--------|-----------|
-| 1 | Inventory hub — worth + KPIs + quick actions | desktop 1 · mobile 1 |
-| 2 | Items list + filters | desktop 2 · mobile 2 |
-| 3 | Item detail — attributes + per-warehouse breakdown | desktop 3 · mobile 3 |
-| 4 | Item detail — stock & cost history tab | desktop 4 |
-| 5 | Add / edit item drawer | desktop 5 · mobile 4 |
-| 6 | Item availability calendar | desktop 6 · mobile 5 |
-| 7 | Stock ledger | desktop 7 · mobile 9 |
-| 8 | Manual stock entry | desktop 8 · mobile 6 |
-| 9 | Receive against PO (GRN) | desktop 9 · mobile 7 |
-| 10 | Adjustment | desktop 10 · mobile 8 |
-| 11 | Dispose | desktop 11 · mobile 8 |
-| 12 | Transfer | desktop 12 |
-| 13 | Reservations + conflict | desktop 13 |
-| 14 | Valuation report | desktop 14 · mobile 10 |
-| 15 | Stock movement / stock-in report | desktop 15 |
-| 16 | Rental utilisation & ROI report | desktop 16 · mobile 10 |
-| 17 | Categories / types / models | — |
+| **A. Dashboard** | | |
+| 1 | Inventory dashboard — worth, KPIs, quick actions, low stock, conflicts | desktop A1 · mobile A1 |
+| **B. Items** | | |
+| 2 | Items list + filters + column chooser | desktop B1 · mobile B1 |
+| 3 | New item — **drawer**, SKU issued, barcode + QR previewed live | desktop B2 · mobile B2 |
+| 4 | Edit item — **drawer**, identity locked, current label + Reprint | desktop B3 |
+| 5 | Item profile · Overview — attributes, channels, label card, stock by warehouse | desktop B4 · mobile B4 |
+| 6 | Item profile · Stock & movement — WAC history + ledger for this SKU | desktop B5 · mobile B5 |
+| 7 | Item profile · Reservations — bookings, blocked-until, conflicts | desktop B6 · mobile B6 |
+| 8 | Item profile · Rentals — history, revenue, amortisation, payback | desktop B7 · mobile B7 |
+| 9 | Item profile · Photos — gallery, is_main, condition shots | desktop B8 · mobile B8 |
+| 10 | Item profile · Audit — field changes, postings, who and when | desktop B9 · mobile B9 |
+| **C. Stock ledger** | | |
+| 11 | Stock ledger — immutable movement history | desktop C1 · mobile C1 |
+| 12 | Stock in (manual / opening) — **drawer** over the ledger | desktop C2 · mobile C2 |
+| 13 | Receive against PO (GRN) — **drawer** over the ledger | desktop C3 · mobile C3 |
+| 14 | Adjustment — **drawer** over the ledger | desktop C4 · mobile C4 |
+| 15 | Dispose — **drawer** over the ledger | desktop C5 · mobile C5 |
+| **D. Reservations** | | |
+| 16 | Reservations list — every booking in the shop | desktop D1 · mobile D1 |
+| 17 | New reservation — **drawer** + double-booking guard dialog | desktop D2 |
+| 18 | Availability calendar — reserved / on rent / cleaning buffer | desktop D3 · mobile D3 |
+| **E. Transfers** | | |
+| 19 | Transfers list — in transit, partially received, completed | desktop E1 · mobile E1 |
+| 20 | New transfer — **drawer** over the transfers list | desktop E2 |
+| **F. Reports** | | |
+| 21 | Valuation report | desktop F1 · mobile F |
+| 22 | Stock movement & stock-in by source | desktop F2 · mobile F |
+| 23 | Rental utilisation & asset ROI | desktop F3 · mobile F |
+| — | Categories / types / models (Settings → master data) | — |
+
+Dari and Pashto versions of every screen above:
+`specs/wireframes/desktop/02-Inventory-Dari.excalidraw`,
+`02-Inventory-Pashto.excalidraw`, and the mobile equivalents.
 
 ---
 
 ## Business rules
 
-- Purpose `sale` → cannot appear on a rental line. Purpose `rental` → cannot appear on a sale line. `both` → either.
+- An item is **sellable** if `sales_unit_price > 0` and **rentable** if `rental_price > 0`. There is no `purpose` column; a sale line rejects an item with no sale price, a rental line rejects an item with no rental price (ADR-013).
+- A rental has **no fixed period**. Its length is `rental_to − rental_from` on the order; `rental_price` buys one rental of any length, and overrun past the agreed return is charged at `rental_late_fee_per_day` (ADR-013).
+- `barcode` is generated from the SKU, `NOT NULL`, unique per tenant and never editable. The QR carries the same payload and is rendered, not stored. Reprint re-renders; it never reissues (ADR-014).
 - `available_qty = on_hand − reserved`. Selling or booking beyond it is blocked unless `tenant_settings.allow_negative_stock = true`, in which case the line is flagged and appears in the Negative Stock report.
 - Reservations never write to the ledger.
 - Valuation always uses `owned_qty × avg_cost` in tenant default currency.

@@ -271,6 +271,76 @@ net_profit   = Gross profit − Expenses
 
 ---
 
+## ADR-013 · An item's channel and its rental length are derived, never stored
+
+**Context.** `inventory_items` carried `purpose enum('sale','rental','both')` and
+`rental_period_days int default 3`. Both restate something the record already
+knows, and neither is kept in step with it. (Defects B14, B15.)
+
+**Decision.**
+
+```
+sellable       = sales_unit_price > 0
+rentable       = rental_price     > 0
+rental length  = sales_orders.rental_to − sales_orders.rental_from
+```
+
+`purpose` and `rental_period_days` are removed from the schema, from every form
+and from every filter.
+
+**Consequences.**
+
+- Turning a dress into a sale-only item is a price edit, not a second edit to a
+  status field that can disagree with the price.
+- A rental is **open**: two days or two weeks, the booking decides. The item
+  carries `rental_price` (one rental, any length),
+  `rental_late_fee_per_day` (overrun past the agreed return — the thing that
+  really does vary by time), `rental_deposit_amount` and `rental_buffer_days`.
+- The items list filters on "sellable / rentable" as a computed predicate.
+  Index `(tenant_id, rental_price)` and `(tenant_id, sales_unit_price)` if those
+  filters get hot.
+- Migration: `purpose` and `rental_period_days` are dropped. Any row whose
+  `purpose` disagreed with its prices was already broken; the prices win.
+
+---
+
+## ADR-014 · Barcode and QR are generated from the SKU
+
+**Context.** `barcode` was free text and nullable, so it could be missing,
+mistyped or duplicated — and a bridal shop scans a printed garment tag dozens of
+times a day. There was no QR at all, although the staff's phones are the only
+scanners most of these shops own. (Defect B16.)
+
+**Decision.** One identity, two symbols, both derived:
+
+```
+sku      = platform_sequences.next('inventory_item')   -- ADF26-0042
+barcode  = code128_payload(sku)                        -- stored, NOT NULL
+qr       = render(sku)                                 -- rendered, never stored
+```
+
+- `barcode` is written in the same statement that issues the SKU and is
+  `unique (tenant_id, barcode)`, so a scan is one indexed lookup.
+- The QR carries the **same payload**. Nothing to keep in sync, and a torn tag
+  can be reprinted from either symbol.
+- Both are read-only in the UI. The New item drawer shows a live preview; the
+  Edit item drawer shows the current label and offers **Reprint**, which
+  re-renders the same codes rather than reissuing them.
+- `sku` therefore becomes immutable after insert. It is already referenced by
+  ledger rows, reservations and purchase-order lines, and now by a tag hanging
+  in the shop.
+
+**Consequences.**
+
+- Items created by a GRN from a free-text purchase-order line get their SKU,
+  barcode and QR at post time, in the same transaction (defect D2).
+- Scanning is available wherever an item is picked: the items search, the
+  stock-in drawer, the reservation drawer and the point of sale.
+- If a tenant ever needs to honour a manufacturer's EAN, that is a **second**
+  column (`supplier_barcode`), not a change to this one.
+
+---
+
 ## Open questions for you 🔶
 
 These are implemented with the stated default. Say the word and I will change them.

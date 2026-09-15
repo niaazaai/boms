@@ -90,8 +90,18 @@ CONVENTIONS
         id (PK)
         tenant_id                   FK tenants(id)
         sku                         varchar(100) not null   -- ADF26-0042
+            -- issued by platform_sequences on insert. IMMUTABLE afterwards:
+            -- ledger rows, reservations and PO lines all point at this item,
+            -- and a printed garment tag is already in the shop.
         name                        varchar(255) not null
-        barcode                     varchar(100) nullable
+        barcode                     varchar(100) not null
+            -- DERIVED FROM THE SKU, never typed.                        [B16]
+            -- barcode = code128_payload(sku)  — currently sku verbatim, so a
+            -- scan is a single indexed lookup on (tenant_id, barcode).
+            -- Generated in the same statement that issues the SKU; regenerated
+            -- only if the SKU is ever reissued, which it is not.
+            -- The QR shown beside it carries the SAME payload and is RENDERED
+            -- at display time, not stored — there is nothing to keep in sync.
 
         main_category_id            FK inventory_main_categories(id)
         sub_category_id             FK inventory_sub_categories(id)
@@ -103,8 +113,13 @@ CONVENTIONS
         color                       varchar(50)
         fabric                      varchar(100)
         season                      varchar(50)
-        purpose                     enum('sale','rental','both') default 'both'
         quality                     enum('high','medium','normal','low') default 'normal'
+            -- REMOVED in v2: purpose enum('sale','rental','both').       [B14]
+            -- It duplicated the prices and could contradict them — an item
+            -- marked 'rental' with only a sale price was unsellable and
+            -- unrentable. The channel is now derived:
+            --   sellable = sales_unit_price   > 0
+            --   rentable = rental_price       > 0
         description                 text
         components                  text                    -- pieces included with the dress
         custom_fields               jsonb
@@ -126,8 +141,15 @@ CONVENTIONS
 
         -- Rental pricing & cost recovery
         rental_currency_id          FK currencies(id)
-        rental_price                numeric(18,2) default 0     -- per rental period
-        rental_period_days          int default 3
+        rental_price                numeric(18,2) default 0
+            -- price for ONE rental, whatever its length. > 0 means rentable.
+            -- REMOVED in v2: rental_period_days.                         [B15]
+            -- A rental has no fixed period. The dates are chosen per booking
+            -- (sales_orders.rental_from / rental_to), so the item record must
+            -- not carry one — it only ever contradicted the booking.
+            -- Duration on an order is rental_to − rental_from.
+            -- Overrun past the agreed return is charged at
+            -- rental_late_fee_per_day, which is what actually varies by time.
         rental_deposit_amount       numeric(18,2) default 0
         rental_late_fee_per_day     numeric(18,2) default 0
         rental_buffer_days          int nullable                -- overrides tenant setting  [B7]
@@ -150,11 +172,13 @@ CONVENTIONS
 
         created_by / updated_by / created_at / updated_at
         -- unique (tenant_id, sku)                                            [A1]
-        -- unique (tenant_id, barcode) where barcode is not null
+        -- unique (tenant_id, barcode)   — barcode is NOT NULL and derived
         -- index (tenant_id, lifecycle_status), (tenant_id, main_category_id)
         -- REMOVED in v2: branch_id, warehouse_id (→ ledger)                  [B5]
         --                status enum (→ lifecycle_status + derived)          [B1]
         --                is_featured/is_hot/is_trending/is_wanted (→ website module)  [F2]
+        --                purpose enum (→ derived from the prices)        [B14]
+        --                rental_period_days (→ dates live on the booking)[B15]
         --                purchase_* block (→ last_purchase_* + ledger)       [B4]
 
 

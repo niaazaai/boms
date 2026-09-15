@@ -16,8 +16,8 @@ procurement  →  inventory  →  sales  →  finance
 
 | Document | What it is |
 |----------|------------|
-| [`specs/review/01-spec-review.md`](./specs/review/01-spec-review.md) | **43 defects** found in the v1 spec — 12 blocking |
-| [`specs/review/02-decisions.md`](./specs/review/02-decisions.md) | **12 ADRs** resolving them · 6 open questions marked 🔶 for you |
+| [`specs/review/01-spec-review.md`](./specs/review/01-spec-review.md) | **46 defects** found in the v1 spec — 12 blocking |
+| [`specs/review/02-decisions.md`](./specs/review/02-decisions.md) | **14 ADRs** resolving them · 6 open questions marked 🔶 for you |
 | [`specs/wireframes/00-Overview.excalidraw`](./specs/wireframes/00-Overview.excalidraw) | Navigation shell, module map, sitemap, corrections board |
 | [`specs/features/README.md`](./specs/features/README.md) | Build order and module specs |
 
@@ -29,15 +29,17 @@ procurement  →  inventory  →  sales  →  finance
 |------|------|
 | Database schema (v2, corrected) | [`specs/database/`](./specs/database/) — `all` is authoritative |
 | Feature maps (build order) | [`specs/features/`](./specs/features/) |
-| Wireframes (Excalidraw) | [`specs/wireframes/`](./specs/wireframes/) |
+| Wireframes (Excalidraw) | [`specs/wireframes/`](./specs/wireframes/) — English · **Dari** · **Pashto** |
+| Finished visual design | [`specs/design/`](./specs/design/) — Figma-ready SVG + a shadcn theme |
 | Application flows | [`specs/flows/application-flows.md`](./specs/flows/application-flows.md) |
 | Spec review & decisions | [`specs/review/`](./specs/review/) |
-| Agent skills & docs | [`.agent/`](./.agent/) |
+| Agent skills & docs | [`.agent/`](./.agent/) — one folder, `.claude` and `.cursor` symlink into it |
 
-Regenerate wireframes:
+Regenerate:
 
 ```bash
-python3 .agent/scripts/wireframes/build.py
+python3 .agent/scripts/wireframes/build.py     # → specs/wireframes/**
+python3 .agent/scripts/design/build.py         # → specs/design/**
 ```
 
 ---
@@ -55,6 +57,21 @@ foreign keys into `finance_accounts`.
 | 4 | **Procurement** | suppliers, purchase orders, GRN with landed cost, payments → A/P |
 | 5 | **Sales** | customers, sale + rental + mixed orders, returns, claims → A/R |
 | 6 | **Finance-Reporting** | five pillars, P&L, A/P & A/R aging, deposits register |
+
+---
+
+## Inventory — what changed in this pass
+
+| | |
+|---|---|
+| **Barcode & QR** | Generated from the SKU, never typed. Code 128 stored, QR rendered, both on the item profile with Print label (ADR-014) |
+| **`purpose` removed** | Sellable = has a sale price · rentable = has a rental price. One fact, one place (ADR-013) |
+| **Rental period removed** | A rental is open — its length is the dates on the booking, not a column on the item (ADR-013) |
+| **Board re-ordered** | Dashboard → Items → Stock ledger → Reservations → Transfers → Reports, each section on its own row |
+| **Item profile completed** | All six tabs drawn: Overview · Stock & movement · Reservations · Rentals · Photos · Audit |
+| **Forms are drawers** | Every create and edit is an offcanvas over its list. A list and its form never share a page |
+| **Dari & Pashto** | Full mirrored boards, generated from the English one so they cannot drift |
+| **Direction badges gone** | The language switcher names a language. No `LTR` / `RTL` label anywhere in the UI |
 
 ---
 
